@@ -103,7 +103,7 @@ dataloader = torch.utils.data.DataLoader(dataset,
                                          batch_size=opt.batch_size,
                                          shuffle=True,
                                          num_workers=int(opt.workers),
-                                         pin_memory=True,
+                                         #pin_memory=True,
                                          drop_last=True)
 
 #Validation Set
@@ -122,7 +122,7 @@ testdataloader = torch.utils.data.DataLoader(test_dataset,
                                              batch_size=opt.batch_size,
                                              shuffle=True,
                                              num_workers=int(opt.workers),
-                                             pin_memory=True,
+                                             #pin_memory=True,
                                              drop_last=True)
 print("Finished, setting up expt")
 
