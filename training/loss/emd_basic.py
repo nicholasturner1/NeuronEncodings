@@ -8,9 +8,6 @@ Achlioptas et al., 2017
 https://github.com/optas/latent_3d_points/blob/master/external/structural_losses/approxmatch.cpp
 https://github.com/optas/latent_3d_points/blob/master/external/structural_losses/approxmatch.cu
 
-Following an example for customizing PyTorch's autograd from
-https://pytorch.org/docs/stable/notes/extending.html#extending-torch-autograd
-
 Nicholas Turner <nturner@cs.princeton.edu>, 2018
 """
 
@@ -20,16 +17,16 @@ import torch
 from torch import nn
 from torch.nn.modules import distance
 
-from torch.autograd import Function
 
-class EMDFunction(Function):
+class EMD(nn.Module):
 
-    @staticmethod
-    def forward(ctx, preds, targets):
+    def __init__(self):
+        nn.Module.__init__(self)
+
+    def forward(self, preds, targets):
 
         pwdist = self.pairwise_dist(preds, targets)
         match = self.optimal_match(pwdist)
-        ctx.save_for_backward(match, pwdist)
 
         return match_cost(match, pwdist)
 
@@ -66,14 +63,7 @@ class EMDFunction(Function):
         return full_match
 
     def match_cost(self, match, pwdist):
-        return torch.sum(match * torch.sqrt(pwdist))
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        match, pwdist = ctx.saved_tensors
-
-
-
+        return torch.sum(match * pwdist)
 
 
 class ApproxEMD(EMD):

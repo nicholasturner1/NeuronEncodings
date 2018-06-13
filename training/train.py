@@ -36,12 +36,12 @@ parser.add_argument('--nepoch', type=int, default=20000,
                     help='number of epochs to train')
 parser.add_argument('--expt_dir', type=str, help='experiment folder',
                     default="%s/seungmount/research/nick_and_sven/models_nick/" % home)
-parser.add_argument('--chkpt_num', type=int, default=0, 
+parser.add_argument('--chkpt_num', type=int, default=0,
                     help='chkpt at which to continue training')
-parser.add_argument('--gpus', nargs="+", default=[0], help='gpu ids')
+parser.add_argument('--gpus', nargs="+", default=["0"], help='gpu ids')
 parser.add_argument('--n_points', type=int, default=5000,
                     help='number of points')
-parser.add_argument('--bottle_fs', type=int, default=2500,
+parser.add_argument('--bottle_fs', type=int, default=128,
                     help='number of latent variables (size of max pool layers)')
 parser.add_argument('--nobn', action="store_true")
 parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
@@ -53,6 +53,8 @@ parser.add_argument('--movement', action="store_true", help='augment with moveme
 parser.add_argument('--chopping', action="store_true", help='augment with chopping')
 parser.add_argument('--dataset_name', type=str, default="full_cells", help='ground truth dataset',
                     choices=["full_cells", "orphans", "all", "soma_vs_rest","orphans2"])
+parser.add_argument('--eval_val', action="store_true",
+                    help="use eval mode during validation"),
 
 opt = parser.parse_args()
 print(opt)
@@ -101,7 +103,8 @@ dataloader = torch.utils.data.DataLoader(dataset,
                                          batch_size=opt.batch_size,
                                          shuffle=True,
                                          num_workers=int(opt.workers),
-                                         pin_memory=True)
+                                         pin_memory=True,
+                                         drop_last=True)
 
 #Validation Set
 test_dataset = CellDataset(gt_dirs=dataset_paths, phase=2,
@@ -113,14 +116,15 @@ test_dataset = CellDataset(gt_dirs=dataset_paths, phase=2,
                            apply_scaling=False,
                            apply_chopping=False,
                            apply_movement=False,
-                           use_normals=opt.use_normals,
                            train_test_split_ratio=.666)
 
 testdataloader = torch.utils.data.DataLoader(test_dataset,
                                              batch_size=opt.batch_size,
                                              shuffle=True,
                                              num_workers=int(opt.workers),
-                                             pin_memory=True)
+                                             pin_memory=True,
+                                             drop_last=True)
+print("Finished, setting up expt")
 
 (model_dir, save_dir, fwd_dir, tb_train, tb_val) = \
     utils.make_required_dirs(opt.expt_dir, opt.expt_name)
@@ -136,9 +140,9 @@ val_writer = tensorboardX.SummaryWriter(tb_val)
 blue = lambda x: '\033[94m' + x + '\033[0m'
 
 in_dim = 3
-
-model_class = getattr(models, model_name)
+model_class = getattr(models, opt.model_name)
 model = model_class(opt.n_points, pt_dim=in_dim, bn=(not opt.nobn))
+model.cuda()
 loss_class = getattr(loss, opt.loss_name)
 loss_fn = loss_class()
 
@@ -148,14 +152,14 @@ if opt.chkpt_num != 0:
     model.load_state_dict(torch.load(model_chkpt))
 
 
-optimizer = optim.Adam(classifier.parameters(), lr=opt.lr)
+optimizer = optim.Adam(model.parameters(), lr=opt.lr)
 lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30000,
                                          gamma=opt.lr_decay)
-model.cuda()
 
 num_batch = len(dataset) / opt.batch_size
 
 
+print("Starting Training Loop")
 train_iter = opt.chkpt_num
 for i_epoch in range(opt.nepoch):
     lr_scheduler.step()
@@ -167,7 +171,7 @@ for i_epoch in range(opt.nepoch):
 
         optimizer.zero_grad()
 
-        pred, _, transform, _ = model(points)
+        pred, _ = model(points)
 
         loss = loss_fn(pred, points)
 
@@ -177,32 +181,31 @@ for i_epoch in range(opt.nepoch):
         train_iter += 1
 
         if (train_iter % 10 == 0):
-            train_writer.add_scalar("Loss", loss.data[0], train_iter)
+            train_writer.add_scalar("Loss", loss.item(), train_iter)
         print('[%d: %d/%d] %s loss: %f ' % (
-            i_epoch, i_batch, num_batch, "train", loss.data[0]))
+            i_epoch, i_batch, num_batch, "train", loss.item()))
 
         #validation
-        if len(train_acc_history) % 100 == 1:
+        if (train_iter != 0 and
+            train_iter % 100 == 0):
             points = test_data_iter.next().cuda()
-
-            curr_batch_size = target.size()[0]
 
             if opt.eval_val:
                 model.eval()#eval mode during evaluation
 
-            pred = classifier(points)
+            pred, _ = model(points)
 
             if opt.eval_val:
                 model.train()#eval mode during evaluation
 
             loss = loss_fn(pred, points)
 
-            val_writer.add_scalar("Loss", loss.data[0], train_iter)
+            val_writer.add_scalar("Loss", loss.item(), train_iter)
             print('[%d: %d/%d] %s loss: %f' % (
-                i_epoch, i_batch, num_batch, blue('test'), loss.data[0]))
+                i_epoch, i_batch, num_batch, blue('test'), loss.item()))
 
-        if (len(train_acc_history) != 0 and
-            len(train_acc_history) % 1000 == 0):
+        if (train_iter != 0 and
+            train_iter % 1000 == 0):
             torch.save(classifier.state_dict(),
                        '{dir}/model_{iter}.chkpt'.format(dir=model_dir,
                                                          iter=train_iter))
