@@ -18,7 +18,9 @@ import loss
 import utils
 
 home = os.path.expanduser("~")
-MODULES_TO_RECORD = [__file__, "utils.py", "datasets.py"]
+folder_path = os.path.dirname(__file__)
+MODULES_TO_RECORD = [__file__, folder_path + "/utils.py",
+                     folder_path + "/datasets.py"]
 
 # Init / Parser -------------------------
 
