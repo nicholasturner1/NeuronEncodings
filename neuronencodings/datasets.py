@@ -25,13 +25,16 @@ class Phase(enum.Enum):
 
 class CellDataset(data.Dataset):
     def __init__(self, gt_dirs, n_points=2500, phase=1, random_seed=0,
-                 train_test_split_ratio=.8, batch_size=1, apply_jitter=False,
+                 train_test_split_ratio=.8, batch_size=1, local_env=True,
+                 apply_jitter=False,
                  apply_rotation=False, apply_scaling=False,
                  apply_movement=False, apply_chopping=False, use_normals=False,
                  n_max_meshes_per_dataset=None, cache_data=True):
         self._gt_dirs = gt_dirs
+        self._gt_files = None
         self._n_points = n_points
         self._phase = Phase(phase)
+        self._local_env = local_env
         self._apply_jitter = apply_jitter
         self._apply_rotation = apply_rotation
         self._apply_scaling = apply_scaling
@@ -66,6 +69,10 @@ class CellDataset(data.Dataset):
     @property
     def is_train(self):
         return self._is_train
+
+    @property
+    def local_env(self):
+        return self._local_env
 
     @property
     def apply_jitter(self):
@@ -124,16 +131,19 @@ class CellDataset(data.Dataset):
 
     @property
     def gt_files(self):
-        ps = []
+        if self._gt_files is not None:
+            return self._gt_files
+
+        self._gt_files = []
         for gt_dir in self.gt_dirs:
             dir_paths = sorted(glob.glob(gt_dir + "/*.h5"), key=os.path.basename)
 
             if self.n_max_meshes_per_dataset is not None:
                 dir_paths = dir_paths[: self.n_max_meshes_per_dataset]
 
-            ps += dir_paths
+            self._gt_files += dir_paths
 
-        return ps
+        return self._gt_files
 
     @property
     def gt_labels_key(self):
@@ -183,13 +193,19 @@ class CellDataset(data.Dataset):
 
         # Apply rotation and jitter
         valid_vertex_ids = []
-        if self.apply_chopping:
-            if np.random.rand() < .9:
-                skel_graph = self.get_skel_graph(mesh_fname)
-                if skel_graph is not None:
-                    skel_nodes, skel_edges = self.read_skeleton(mesh_fname)
-                    valid_vertex_ids = chop_point_cloud(vertices, skel_graph,
-                                                        skel_nodes)
+        # if self.apply_chopping:
+        #     if np.random.rand() < .9:
+        #         skel_graph = self.get_skel_graph(mesh_fname)
+        #         if skel_graph is not None:
+        #             skel_nodes, skel_edges = self.read_skeleton(mesh_fname)
+        #             valid_vertex_ids = chop_point_cloud(vertices, skel_graph,
+        #                                                 skel_nodes)
+
+        if self.local_env:
+            kdtree = spatial.cKDTree(vertices)
+            center_vertex_id = np.random.randint(0, len(vertices))
+            _, valid_vertex_ids = kdtree.query(vertices[center_vertex_id],
+                                               k=self.n_points, n_jobs=-1)
 
         if len(valid_vertex_ids) < self.n_points:
             valid_vertex_ids = np.arange(len(vertices), dtype=np.int)
@@ -197,6 +213,8 @@ class CellDataset(data.Dataset):
         if len(valid_vertex_ids) < self.n_points:
             vertex_ids = np.random.choice(valid_vertex_ids, self.n_points,
                                           replace=True)
+        elif len(valid_vertex_ids) == self.n_points:
+            vertex_ids = valid_vertex_ids
         else:
             vertex_ids = np.random.choice(valid_vertex_ids, self.n_points,
                                           replace=False)
@@ -390,8 +408,8 @@ class CellDataset(data.Dataset):
 
     def pick_files(self):
         """
-        Picks which files can be used for training, and splits them
-        into training & test
+        Picks which files can be used for neuronencodings, and splits them
+        into neuronencodings & test
         """
 
         num_vs_per_file = self.read_all_vertex_counts()

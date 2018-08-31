@@ -14,10 +14,10 @@ from torch import autograd
 class PointNetAE(nn.Module):
 
     def __init__(self, n_pts, pt_dim=3,
-                 mlp1_fs=[64,128,128,256], 
+                 mlp1_fs=[512,256,256],
                  bottle_fs=128,
-                 mlp2_fs=[256,256,2048],
-                 bn=True, bn_decay=None, act=F.relu):
+                 mlp2_fs=[256,256,512],
+                 bn=False, bn_decay=None, act=F.relu):
         """
         channels_in - dimension on input points
         channels_out - dimension of outputs
@@ -55,7 +55,7 @@ class PointNetAE(nn.Module):
         x = self.output(self.mlp2(global_fs))
         return x.view(batch_size, self.n_pts, self.pt_dim), global_fs
 
-    def forward_global(self,x):
+    def forward_global(self, x):
         x = x.transpose(2,1)
         x = self.mlp1(x)
         return x.max(1) #? to test
@@ -63,7 +63,7 @@ class PointNetAE(nn.Module):
 
 class ConvMLP(nn.Module):
 
-    def __init__(self, *layer_channels, bn=True, act=F.relu, bn_decay=None):
+    def __init__(self, *layer_channels, bn=False, act=F.relu, bn_decay=None):
 
         assert len(layer_channels) > 1, "need more than one channel"
         self.num_layers = len(layer_channels)
@@ -103,7 +103,7 @@ def conv(channels_in, channels_out, ks, bias=True):
 
 class LinearMLP(nn.Module):
 
-    def __init__(self, *layer_channels, bn=True, act=F.relu, bn_decay=None):
+    def __init__(self, *layer_channels, bn=False, act=F.relu, bn_decay=None):
 
         assert len(layer_channels) > 1, "need more than one channel"
         self.num_layers = len(layer_channels)

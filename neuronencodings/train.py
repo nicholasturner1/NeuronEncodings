@@ -27,34 +27,35 @@ MODULES_TO_RECORD = [__file__, folder_path + "/utils.py",
 parser = argparse.ArgumentParser()
 parser.add_argument('expt_name')
 parser.add_argument('--model_name', default='PointNetAE',
-                    help='model to use for training')
+                    help='model to use for neuronencodings')
 parser.add_argument('--loss_name', default='ApproxEMD',
-                    help='model to use for training')
-parser.add_argument('--batch_size', type=int, default=5,
+                    help='model to use for neuronencodings')
+parser.add_argument('--batch_size', type=int, default=6,
                     help='input batch size')
 parser.add_argument('--workers', type=int,
                     help='number of data loading workers', default=4)
 parser.add_argument('--nepoch', type=int, default=20000,
                     help='number of epochs to train')
 parser.add_argument('--expt_dir', type=str, help='experiment folder',
-                    default="%s/seungmount/research/nick_and_sven/models_nick/" % home)
+                    default="%s/seungmount/research/nick_and_sven/models_sven/" % home)
 parser.add_argument('--chkpt_num', type=int, default=0,
-                    help='chkpt at which to continue training')
+                    help='chkpt at which to continue neuronencodings')
 parser.add_argument('--gpus', nargs="+", default=["0"], help='gpu ids')
-parser.add_argument('--n_points', type=int, default=5000,
+parser.add_argument('--n_points', type=int, default=1500,
                     help='number of points')
 parser.add_argument('--bottle_fs', type=int, default=128,
                     help='number of latent variables (size of max pool layers)')
 parser.add_argument('--nobn', action="store_true")
 parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
 parser.add_argument('--lr_decay', type=float, default=0.95, help='learning rate decay every 10 epochs')
+parser.add_argument('--validation', action="store_true", help='enables testing')
 parser.add_argument('--rotation', action="store_true", help='augment with rotation')
 parser.add_argument('--jitter', action="store_true", help='augment with jitter')
 parser.add_argument('--scaling', action="store_true", help='augment with scaling')
 parser.add_argument('--movement', action="store_true", help='augment with movement')
 parser.add_argument('--chopping', action="store_true", help='augment with chopping')
 parser.add_argument('--dataset_name', type=str, default="full_cells", help='ground truth dataset',
-                    choices=["full_cells", "orphans", "all", "soma_vs_rest","orphans2"])
+                    choices=["full_cells", "orphans", "all", "soma_vs_rest","orphans2", "orphan_axons"])
 parser.add_argument('--eval_val', action="store_true",
                     help="use eval mode during validation"),
 
@@ -82,6 +83,8 @@ elif opt.dataset_name == "orphans":
 elif opt.dataset_name == "orphans2":
     dataset_paths = [home + "/research/pointnet/orphan_dataset/train_val_axons",
                      home + "/research/pointnet/orphan_dataset/train_val_dends/"]
+elif opt.dataset_name == "orphan_axons":
+    dataset_paths = [home + "/seungmount/research/svenmd/pointnet_orphan_axons_gt_180308/"]
 else:
     dataset_paths = [home + "/seungmount/research/svenmd/pointnet_axoness_gt_rfc_based_masked_180322/",
                      home + "/pointnet_orphan_axons_gt_180308/",
@@ -99,7 +102,7 @@ dataset = CellDataset(gt_dirs=dataset_paths,
                       apply_scaling=opt.scaling,
                       apply_chopping=opt.chopping,
                       apply_movement=opt.movement,
-                      train_test_split_ratio=.666)
+                      train_test_split_ratio=.9)
 
 dataloader = torch.utils.data.DataLoader(dataset,
                                          batch_size=opt.batch_size,
@@ -118,7 +121,7 @@ test_dataset = CellDataset(gt_dirs=dataset_paths, phase=2,
                            apply_scaling=False,
                            apply_chopping=False,
                            apply_movement=False,
-                           train_test_split_ratio=.666)
+                           train_test_split_ratio=.9)
 
 testdataloader = torch.utils.data.DataLoader(test_dataset,
                                              batch_size=opt.batch_size,
@@ -143,14 +146,16 @@ blue = lambda x: '\033[94m' + x + '\033[0m'
 
 in_dim = 3
 model_class = getattr(models, opt.model_name)
-model = model_class(opt.n_points, pt_dim=in_dim, bn=(not opt.nobn))
+model = model_class(opt.n_points, bottle_fs=opt.bottle_fs, pt_dim=in_dim,
+                    bn=not(opt.nobn))
 model.cuda()
+
 loss_class = getattr(loss, opt.loss_name)
 loss_fn = loss_class()
 
 if opt.chkpt_num != 0:
     model_chkpt = "{dir}/model_{iter}.chkpt".format(dir=model_dir,
-                                                    iter=train_iter)
+                                                    iter=opt.chkpt_num)
     model.load_state_dict(torch.load(model_chkpt))
 
 
@@ -188,8 +193,7 @@ for i_epoch in range(opt.nepoch):
             i_epoch, i_batch, num_batch, "train", loss.item()))
 
         #validation
-        if (train_iter != 0 and
-            train_iter % 100 == 0):
+        if (train_iter != 0 and train_iter % 100 == 0) and opt.validation:
             points = test_data_iter.next().cuda()
 
             if opt.eval_val:
@@ -207,7 +211,7 @@ for i_epoch in range(opt.nepoch):
                 i_epoch, i_batch, num_batch, blue('test'), loss.item()))
 
         if (train_iter != 0 and
-            train_iter % 1000 == 0):
-            torch.save(classifier.state_dict(),
+            train_iter % 500 == 0):
+            torch.save(model.state_dict(),
                        '{dir}/model_{iter}.chkpt'.format(dir=model_dir,
                                                          iter=train_iter))

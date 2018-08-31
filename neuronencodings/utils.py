@@ -9,9 +9,6 @@ import h5py
 import importlib
 import types
 
-import torch
-
-
 def make_required_dirs(expt_dir, expt_name):
 
     dirs = get_required_dirs(expt_dir, expt_name)
