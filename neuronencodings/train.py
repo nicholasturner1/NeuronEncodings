@@ -12,7 +12,7 @@ import torch.optim as optim
 import torch.utils.data
 import tensorboardX
 
-from datasets import CellDataset
+from datasets_pychg import CellDataset
 import models
 import loss
 import utils
@@ -30,7 +30,7 @@ parser.add_argument('--model_name', default='PointNetAE',
                     help='model to use for neuronencodings')
 parser.add_argument('--loss_name', default='ApproxEMD',
                     help='model to use for neuronencodings')
-parser.add_argument('--batch_size', type=int, default=6,
+parser.add_argument('--batch_size', type=int, default=10,
                     help='input batch size')
 parser.add_argument('--workers', type=int,
                     help='number of data loading workers', default=4)
@@ -41,9 +41,9 @@ parser.add_argument('--expt_dir', type=str, help='experiment folder',
 parser.add_argument('--chkpt_num', type=int, default=0,
                     help='chkpt at which to continue neuronencodings')
 parser.add_argument('--gpus', nargs="+", default=["0"], help='gpu ids')
-parser.add_argument('--n_points', type=int, default=1500,
+parser.add_argument('--n_points', type=int, default=250,
                     help='number of points')
-parser.add_argument('--bottle_fs', type=int, default=128,
+parser.add_argument('--bottle_fs', type=int, default=64,
                     help='number of latent variables (size of max pool layers)')
 parser.add_argument('--nobn', action="store_true")
 parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
@@ -55,7 +55,9 @@ parser.add_argument('--scaling', action="store_true", help='augment with scaling
 parser.add_argument('--movement', action="store_true", help='augment with movement')
 parser.add_argument('--chopping', action="store_true", help='augment with chopping')
 parser.add_argument('--dataset_name', type=str, default="full_cells", help='ground truth dataset',
-                    choices=["full_cells", "orphans", "all", "soma_vs_rest","orphans2", "orphan_axons"])
+                    choices=["full_cells", "orphans", "all", "soma_vs_rest","orphans2",
+                             "orphan_axons", "orphan_axons_refined", "fish_refined",
+                             "full_cells_refined"])
 parser.add_argument('--eval_val', action="store_true",
                     help="use eval mode during validation"),
 
@@ -85,6 +87,12 @@ elif opt.dataset_name == "orphans2":
                      home + "/research/pointnet/orphan_dataset/train_val_dends/"]
 elif opt.dataset_name == "orphan_axons":
     dataset_paths = [home + "/seungmount/research/svenmd/pointnet_orphan_axons_gt_180308/"]
+elif opt.dataset_name == "orphan_axons_refined":
+    dataset_paths = [home + "/seungmount/research/svenmd/pointnet_orphan_axons_gt_180308_refined/"]
+elif opt.dataset_name == "fish_refined":
+    dataset_paths = [home + "/seungmount/research/svenmd/180831_meshes_ashwin_refined/"]
+elif opt.dataset_name == "full_cells_refined":
+    dataset_paths = [home + "/seungmount/research/svenmd/pointnet_full_semantic_labels_masked_180401_refined/"]
 else:
     dataset_paths = [home + "/seungmount/research/svenmd/pointnet_axoness_gt_rfc_based_masked_180322/",
                      home + "/pointnet_orphan_axons_gt_180308/",
@@ -93,7 +101,7 @@ else:
 print("Loading data...")
 #Training Set
 dataset = CellDataset(gt_dirs=dataset_paths,
-                      phase=1,
+                      phase=3,
                       n_points=opt.n_points,
                       random_seed=opt.manualSeed,
                       batch_size=opt.batch_size,
@@ -102,7 +110,7 @@ dataset = CellDataset(gt_dirs=dataset_paths,
                       apply_scaling=opt.scaling,
                       apply_chopping=opt.chopping,
                       apply_movement=opt.movement,
-                      train_test_split_ratio=.9)
+                      train_test_split_ratio=1.)
 
 dataloader = torch.utils.data.DataLoader(dataset,
                                          batch_size=opt.batch_size,
@@ -121,7 +129,7 @@ test_dataset = CellDataset(gt_dirs=dataset_paths, phase=2,
                            apply_scaling=False,
                            apply_chopping=False,
                            apply_movement=False,
-                           train_test_split_ratio=.9)
+                           train_test_split_ratio=1.)
 
 testdataloader = torch.utils.data.DataLoader(test_dataset,
                                              batch_size=opt.batch_size,
