@@ -4,11 +4,15 @@ import torch
 import os
 from scipy import spatial
 
-home = os.path.expanduser("~")
-expt_dir = "%s/seungmount/research/nick_and_sven/models_sven/" % home
 
 import models
-from datasets import CellDataset
+from datasets_pychg import CellDataset
+
+from meshparty import mesh_io
+
+home = os.path.expanduser("~")
+expt_dir = "%s/seungmount/research/nick_and_sven/models_sven/" % home
+meshmeta = mesh_io.MeshMeta()
 
 
 def load_model(expt_name, model_name, chkpt_num, expt_dir=expt_dir,
@@ -42,9 +46,15 @@ def predict_points(model, points):
     return fs
 
 
-def load_orphans(n_points=2500, batch_size=2):
-    dataset_paths = [home + "/seungmount/research/svenmd/pointnet_orphan_axons_gt_180308/",
-                     home + "/seungmount/research/svenmd/pointnet_orphan_dendrites_gt_180308/"]
+def load_orphans(n_points=2500, batch_size=2, dataset_name="pinky"):
+    if dataset_name == "pinky":
+        dataset_paths = [home + "/seungmount/research/svenmd/pointnet_orphan_axons_gt_180308_refined/"]
+    elif dataset_name == "full_cells_pinky":
+        dataset_paths = [home + "/seungmount/research/svenmd/pointnet_full_semantic_labels_masked_180401_refined/"]
+    elif dataset_name == "fish":
+        dataset_paths = [home + "/seungmount/research/svenmd/180831_meshes_ashwin_refined/"]
+    else:
+        raise()
 
     dataset = CellDataset(gt_dirs=dataset_paths,
                           phase=3,
@@ -94,4 +104,39 @@ def load_orphan_vertex_block(dataset, fnames, n_points=2500):
 
     return np.array(vertices_list, dtype=np.float32),\
            np.array(vertex_ids_list, dtype=np.int)
+
+def load_vertex_block_pychg(fnames, center_coords=None, n_points=500,
+                            local_env=True):
+    vertices_list = []
+    vertex_ids_list = []
+
+    if center_coords is None:
+        center_coords = [None] * len(fnames)
+
+    for i_fname, fname in enumerate(fnames):
+
+        mesh = meshmeta.mesh(fname)
+
+        if local_env:
+            vertices, center_vertex_id = mesh.get_local_view(n_points,
+                                                             center_coord=center_coords[i_fname],
+                                                             pc_align=True,
+                                                             method="kdtree")
+        else:
+            vertices = mesh.vertices[np.random.choice(
+                np.arange(len(mesh.vertices), dtype=np.int), n_points,
+                replace=False)]
+
+        if len(vertices) < n_points:
+            vertices = vertices[np.random.choice(len(vertices), n_points, replace=True)]
+
+        # Normalize to unit sphere and mean zero
+        vertices -= np.min(vertices, axis=0)[None]
+        vertices /= np.max(np.linalg.norm(vertices, axis=1))
+
+        vertices_list.append(vertices)
+        vertex_ids_list.append(center_vertex_id)
+
+    return np.array(vertices_list, dtype=np.float32),\
+           np.array(vertex_ids_list)
 
