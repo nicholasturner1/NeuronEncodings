@@ -14,10 +14,10 @@ from torch import autograd
 class PointNetAE(nn.Module):
 
     def __init__(self, n_pts, pt_dim=3,
-                 mlp1_fs=[512,256,256],
+                 mlp1_fs=[512,256,256, 128],
                  bottle_fs=128,
-                 mlp2_fs=[256,256,512],
-                 bn=False, bn_decay=None, act=F.relu):
+                 mlp2_fs=[128,256,256,512],
+                 bn=True, bn_decay=None, act=F.relu):
         """
         channels_in - dimension on input points
         channels_out - dimension of outputs
