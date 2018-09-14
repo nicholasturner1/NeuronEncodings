@@ -1,0 +1,108 @@
+__doc__ = """
+Dataset Module Utilities - mostly for handling files and datasets
+"""
+import glob
+import os
+import random
+
+from meshparty import mesh_io
+
+
+# Datasets -----------------------
+SVEN_BASE = "seungmount/research/svenmd"
+NICK_BASE = "seungmount/research/Nick/"
+DATASET_DIRS = {
+    "full_cells": [f"{SVEN_BASE}/pointnet_axoness_gt_180223/"],
+
+    "soma_vs_rest": [f"{SVEN_BASE}/pointnet_soma_masked_180401"],
+
+    "orphans": [f"{SVEN_BASE}/pointnet_orphan_axons_gt_180308/",
+                f"{SVEN_BASE}/pointnet_orphan_dendrites_gt_180308/"],
+
+    "orphans2": [f"{NICK_BASE}/pointnet/orphan_dataset/train_val_axons",
+                 f"{NICK_BASE}/pointnet/orphan_dataset/train_val_dends/"],
+
+    "orphan_axons": [f"{SVEN_BASE}/pointnet_orphan_axons_gt_180308/"],
+
+    "orphan_axons_refined": [(f"{SVEN_BASE}"
+                              "/pointnet_orphan_axons_gt_180308_refined/")],
+
+    "fish_refined": [f"{SVEN_BASE}/180831_meshes_ashwin_refined/"],
+
+    "full_cells_refined": [(f"{SVEN_BASE}"
+                            "/pointnet_full_semantic_labels"
+                            "_masked_180401_refined/")],
+
+    "default": [f"{SVEN_BASE}/pointnet_axoness_gt_rfc_based_masked_180322/",
+                f"{SVEN_BASE}/pointnet_orphan_axons_gt_180308/",
+                f"{SVEN_BASE}/pointnet_orphan_dendrites_gt_180308/"]
+}
+# --------------------------------
+
+
+def fetch_dset_dirs(dset_name=None):
+    """
+    Finds the global pathname to a list of directories which represent a
+    dataset by name.
+    """
+    assert (dset_name is None) or (dset_name in DATASET_DIRS), "invalid name"
+
+    dset_name = "default" if dset_name is None else dset_name
+
+    home = os.path.expanduser("~")
+
+    return list(os.path.join(home, d) for d in DATASET_DIRS[dset_name])
+
+
+def files_from_dir(dirname, exts=["obj", "h5"]):
+    """
+    Searches a directory for a set of extensions and returns the files
+    matching those extensions, sorted by basename
+    """
+    filenames = list()
+    for ext in exts:
+        ext_expr = os.path.join(dirname, f"*.{ext}")
+        filenames.extend(glob.glob(ext_expr))
+
+    return sorted(filenames, key=os.path.basename)
+
+
+def split_files(filenames, train_split=0.8,
+                val_split=0.1, test_split=0.1, seed=None):
+
+    if seed is not None:
+        random.seed(seed)
+
+    # Normalizing splits for arbitrary values
+    total = train_split + val_split + test_split
+
+    train_split = train_split / total
+    val_split = val_split / total
+    test_split = test_split / total
+
+    n_train = round(train_split * len(filenames))
+    n_val = round(val_split * len(filenames))
+
+    permutation = random.sample(filenames, len(filenames))
+
+    train_files = permutation[:n_train]
+    val_files = permutation[n_train:(n_train+n_val)]
+    test_files = permutation[(n_train+n_val):]
+
+    return train_files, val_files, test_files
+
+
+# Helper functions for testing (e.g. sample.py)
+def pull_n_samples(dset, n):
+    """Pulls n random samples from a dataset object"""
+    return list(dset[i] for i in random.sample(range(len(dset)), n))
+
+
+def save_samples(samples, output_prefix="sample"):
+    """Saves a list of samples to ply files (with h5 labels)"""
+
+    for (i, vertices) in enumerate(samples):
+        vertex_fname = "{pref}{i}_vertices.ply".format(pref=output_prefix, i=i)
+        if os.path.dirname(vertex_fname) == "":
+            vertex_fname = "./" + vertex_fname
+        mesh_io.Mesh.write_vertices_ply(None, vertex_fname, coords=vertices)
