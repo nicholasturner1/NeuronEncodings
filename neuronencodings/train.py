@@ -19,8 +19,9 @@ import utils
 HOME = os.path.expanduser("~")
 THIS_DIR = os.path.dirname(__file__)
 DEFAULT_EXPT_DIR = f"{HOME}/seungmount/research/nick_and_sven/models_sven/"
-MODULES_TO_RECORD = [__file__, f"{THIS_DIR}/utils.py",
-                     f"{THIS_DIR}/data/cell_dataset.py"]
+MODULES_TO_RECORD = [__file__,
+                     os.path.join(THIS_DIR, "utils.py"),
+                     os.path.join(THIS_DIR, "data", "cell_dataset.py")]
 
 # Init / Parser -------------------------
 
@@ -69,10 +70,12 @@ parser.add_argument('--eval_val', action="store_true",
                     help='switch to use eval mode during validation')
 parser.add_argument('--manualSeed', type=int, default=2,
                     help='random seed for train/val/test split')
-parser.add_argument('--val_intv', type=int, default=100,
+parser.add_argument('--val_intv', type=int, default=20,
                     help='model evaluation interval, set to -1 for no eval')
 parser.add_argument('--chkpt_intv', type=int, default=500,
                     help='model checkpoint interval')
+parser.add_argument('--loss_intv', type=int, default=10,
+                    help='loss display interval')
 parser.add_argument('--train_split', type=float, default=0.8,
                     help='amount of data to use for training')
 parser.add_argument('--val_split', type=float, default=0.1,
@@ -99,7 +102,6 @@ train_dset = CellDataset(gt_dirs=gt_dirs,
                          phase=phase,
                          n_points=opt.n_points,
                          random_seed=opt.manualSeed,
-                         batch_size=opt.batch_size,
                          apply_rotation=opt.rotation,
                          apply_jitter=opt.jitter,
                          apply_scaling=opt.scaling,
@@ -122,7 +124,6 @@ val_dset = CellDataset(gt_dirs=gt_dirs,
                        phase=data.Phase.VAL,
                        n_points=opt.n_points,
                        random_seed=opt.manualSeed,
-                       batch_size=opt.batch_size,
                        apply_rotation=False,
                        apply_jitter=False,
                        apply_scaling=False,
@@ -161,7 +162,7 @@ utils.set_gpus(opt.gpus)
 print("Setting up training")
 
 model = utils.load_autoencoder(opt.model_name,
-                               n_pts=opt.n_pts, bottle_fs=opt.bottle_fs,
+                               n_pts=opt.n_points, bottle_fs=opt.bottle_fs,
                                bn=not(opt.nobn), model_dir=model_dir,
                                chkpt_num=opt.chkpt_num)
 
@@ -172,7 +173,7 @@ optimizer = optim.Adam(model.parameters(), lr=opt.lr)
 lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30000,
                                          gamma=opt.lr_decay)
 
-num_batch = len(train_dset) / opt.batch_size
+num_batch = len(train_dset) // opt.batch_size
 
 
 print("Starting training loop")
@@ -199,7 +200,7 @@ for i_epoch in range(opt.nepoch):
 
         if (train_iter % opt.loss_intv == 0):
             train_writer.add_scalar("Loss", loss_val, train_iter)
-        utils.print_loss("train", loss_val, i_epoch, i_batch, num_batch)
+        utils.print_loss("train", loss_val, i_epoch+1, i_batch+1, num_batch)
 
         # Evaluation on validation set
         if (train_iter % opt.val_intv == 0) and (opt.val_intv > 0):
@@ -219,7 +220,7 @@ for i_epoch in range(opt.nepoch):
 
             val_writer.add_scalar("Loss", loss_val, train_iter)
             tag = utils.blue("val")
-            utils.print_loss(tag, loss_val, i_epoch, i_batch, num_batch)
+            utils.print_loss(tag, loss_val, i_epoch+1, i_batch+1, num_batch)
 
         if (train_iter % opt.chkpt_intv == 0):
             torch.save(model.state_dict(),

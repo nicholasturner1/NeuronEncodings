@@ -159,7 +159,6 @@ class CellDataset(data.Dataset):
         else:   # default phase == Phase.FULL
             mesh_fname = self._valid_files[index]
 
-        print(mesh_fname)
         mesh = self.meshmeta.mesh(mesh_fname)
 
         if self.local_env:

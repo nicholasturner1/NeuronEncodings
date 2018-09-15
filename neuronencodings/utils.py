@@ -31,7 +31,8 @@ def load_model(model_name, model_args, model_kwargs,
     if (model_dir is not None) and (chkpt_num is not None):
         chkpt_fname = f"{model_dir}/model_{iter}.chkpt"
 
-    model.load_state_dict(torch.load(chkpt_fname))
+    if chkpt_fname is not None:
+        model.load_state_dict(torch.load(chkpt_fname))
 
     return model
 
@@ -46,9 +47,9 @@ def load_autoencoder(model_name, n_pts=2500, pt_dim=3, bottle_fs=128,
 
     model_kwargs = dict(n_pts=n_pts, pt_dim=pt_dim, bottle_fs=bottle_fs, bn=bn)
 
-    load_model(model_name, list(), model_kwargs,
-               model_dir=model_dir, chkpt_num=chkpt_num,
-               chkpt_fname=chkpt_fname)
+    return load_model(model_name, list(), model_kwargs,
+                      model_dir=model_dir, chkpt_num=chkpt_num,
+                      chkpt_fname=chkpt_fname)
 
 
 def make_required_dirs(expt_dir, expt_name):
