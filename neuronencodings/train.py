@@ -81,6 +81,8 @@ parser.add_argument('--test_split', type=float, default=0.1,
                     help='amount of data to reserve for testing')
 parser.add_argument('--use_full_data', action="store_true",
                     help='whether to use the full dataset for training')
+parser.add_argument('--local_env', action="store_true",
+                    help='whether to use the local neighborhood patches')
 
 opt = parser.parse_args()
 print(opt)
@@ -105,7 +107,8 @@ train_dset = CellDataset(gt_dirs=gt_dirs,
                          apply_movement=opt.movement,
                          train_split=opt.train_split,
                          val_split=opt.val_split,
-                         test_split=opt.test_split)
+                         test_split=opt.test_split,
+                         local_env=opt.local_env)
 
 train_loader = torch.utils.data.DataLoader(train_dset,
                                            batch_size=opt.batch_size,
@@ -127,7 +130,8 @@ val_dset = CellDataset(gt_dirs=gt_dirs,
                        apply_movement=False,
                        train_split=opt.train_split,
                        val_split=opt.val_split,
-                       test_split=opt.test_split)
+                       test_split=opt.test_split,
+                       local_env=opt.local_env)
 
 val_loader = torch.utils.data.DataLoader(val_dset,
                                          batch_size=opt.batch_size,
