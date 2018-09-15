@@ -25,7 +25,7 @@ class Phase(enum.Enum):
 
 
 class CellDataset(data.Dataset):
-    def __init__(self, gt_dirs, n_points=2500, phase=Phase.TRAIN, batch_size=1,
+    def __init__(self, gt_dirs, n_points=2500, phase=Phase.TRAIN,
                  random_seed=0, train_split=0.8, val_split=0.1, test_split=0.1,
                  local_env=True, apply_jitter=False, apply_rotation=False,
                  apply_scaling=False, apply_movement=False,
@@ -35,7 +35,6 @@ class CellDataset(data.Dataset):
         self._gt_files = None  # lazily populated
 
         self._n_points = n_points
-        self._batch_size = batch_size
 
         self._local_env = local_env
         self._apply_jitter = apply_jitter
@@ -71,10 +70,6 @@ class CellDataset(data.Dataset):
     @property
     def n_points(self):
         return self._n_points
-
-    @property
-    def batch_size(self):
-        return self._batch_size
 
     @property
     def local_env(self):
