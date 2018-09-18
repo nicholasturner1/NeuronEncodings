@@ -13,11 +13,11 @@ import h5py
 
 import torch
 
-import models
+from . import models
 
 
 def load_model(model_name, model_args, model_kwargs,
-               chkpt_fname=None, model_dir=None, chkpt_num=None, eval_=True):
+               chkpt_fname=None, model_dir=None, chkpt_num=None, eval_=False):
     """ Generalized model loading function """
 
     model_class = getattr(models, model_name)
@@ -49,7 +49,7 @@ def load_autoencoder(model_name, n_pts=2500, pt_dim=3, bottle_fs=128,
 
     return load_model(model_name, list(), model_kwargs,
                       model_dir=model_dir, chkpt_num=chkpt_num,
-                      chkpt_fname=chkpt_fname)
+                      chkpt_fname=chkpt_fname, eval_=eval_)
 
 
 def make_required_dirs(expt_dir, expt_name):

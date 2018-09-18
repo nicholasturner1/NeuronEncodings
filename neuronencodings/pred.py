@@ -1,24 +1,61 @@
-import os
+import collections
 
 import numpy as np
-from scipy import spatial
 
 import torch
 
-from meshparty import mesh_io
-
-import utils
-import data
-from data import CellDataset
-from data import transform
+from meshparty import iterator
 
 
-HOME = os.path.expanduser("~")
-expt_dir = "%s/seungmount/research/nick_and_sven/models_sven/" % home
-MESHMETA = mesh_io.MeshMeta()
+def encode_mesh_by_views(model, mesh, n_points, batch_size=10, 
+                         order="random", pc_align=False, method="kdtree", 
+                         verbose=False, pt_dim=3):
+    """ 
+    Runs inference over the local views of a single mesh. Assumes that you have
+    at least one full batch worth of local views (otherwise the inference will output
+    strange values
+    """
+
+    # buffer to hold a batch of local views/centers
+    view_batch = np.empty((batch_size, n_points, pt_dim), dtype=np.float32)
+    center_batch = np.empty((batch_size, ), dtype=np.uint32)
+    
+    # record of all inferred vectors and centers so far
+    vectors, centers = list(), list()
+
+    it = iterator.LocalViewIterator(mesh, n_points, order=order, 
+                                    pc_align=pc_align, method=method,
+                                    verbose=False)
+
+    batch_i = 0
+    while True:
+        view_batch, center_batch, new_sz = fill_batch(view_batch, center_batch,
+                                                      it, batch_size)
+
+        if new_sz == 0:
+            break
+
+        if verbose:
+            print(f"batch {batch_i}")
+
+        new_vectors = unpack_batch(predict_batch(model, view_batch))
+        new_centers = unpack_batch(center_batch)
+
+        vectors.extend(new_vectors)
+        centers.extend(new_centers)
+        batch_i += 1
+
+    return vectors, centers
 
 
-def predict_points(model, points):
+def unpack_batch(batch):
+    """ Splits the contents of a batch into a list """
+    return list(batch[i,...] for i in range(batch.shape[0]))
+
+
+def predict_batch(model, points):
+    """ Runs inference on a batch of points """ 
+
     points_tensor = torch.from_numpy(points).cuda()
 
     with torch.no_grad():
@@ -26,91 +63,109 @@ def predict_points(model, points):
     return fs.data.cpu().numpy()
 
 
-def load_orphans(n_points=2500, batch_size=2, 
-                 dset_name="orphan_axons_refined"):
+def fill_batch(view_batch, center_batch, it, n):
+    """ 
+    Fills as many items in a batch as possible with new views. Leaves
+    the rest as-is
+    """
 
-    gt_dirs = data.fetch_dset_dirs(dset_name)
+    num_added = 0
+    for i in range(n):
+        try:
+            
+            view, center = next(it)
+            view_batch[i,...] = view
+            center_batch[i] = center
+            num_added += 1
+        except StopIteration:
+            break
+
+    return view_batch, center_batch, num_added
 
 
-    dataset = CellDataset(gt_dirs=dataset_paths,
-                          phase=3,
-                          n_points=n_points,
-                          random_seed=0,
-                          batch_size=batch_size,
-                          apply_rotation=False,
-                          apply_jitter=False,
-                          apply_scaling=False,
-                          apply_chopping=False,
-                          apply_movement=False,
-                          train_test_split_ratio=.666)
+def encode_meshs_by_views(model, meshes, n_points, batch_size=10,
+                          order="random", pc_align=False, method="kdtree",
+                          verbose=False, pt_dim=3):
+    """ 
+    Runs inference over the local views of multiple meshes. Assumes that you have
+    at least one full batch worth of local views (otherwise the inference will output
+    strange values
+    """
 
-    return dataset
+    # buffers to hold a batch of local views, centers, and mesh indices
+    view_batch = np.empty((batch_size, n_points, pt_dim), dtype=np.float32)
+    center_batch = np.empty((batch_size,), dtype=np.uint32)
+    ind_batch = np.empty((batch_size,), dtype=np.uint32)
+
+    its = [iterator.LocalViewIterator(mesh, n_points, order=order,
+                                      pc_align=pc_align, method=method,
+                                      verbose=False) for mesh in meshes]
+    multi_it = collections.deque(list(enumerate(its)))
+
+    # record of the inferred vectors and centers
+    vectors = list(list() for mesh in meshes)
+    centers = list(list() for mesh in meshes)
+
+    batch_i = 0
+    while True:
+        (view_batch, center_batch, id_batch, new_sz) = \
+            fill_multi_it_batch(view_batch, center_batch, ind_batch, 
+                                multi_it, batch_size)
+
+        if new_sz == 0:
+            break
+
+        if verbose:
+            print(f"batch {batch_i}")
+
+        new_vectors = unpack_batch(predict_batch(model, view_batch))
+        new_centers = unpack_batch(center_batch)
+
+        for (i,v) in enumerate(ind_batch):
+            vectors[v].append(new_vectors[i])
+            centers[v].append(new_centers[i])
+        batch_i += 1
+
+    return vectors, centers
 
 
-def load_orphan_vertex_block(dataset, fnames, n_points=2500):
-    vertices_list = []
-    vertex_ids_list = []
-    for fname in fnames:
-        vertices = dataset.read_vertices(fname).astype(np.float32)
+def fill_multi_it_batch(view_batch, center_batch, ind_batch, 
+                        multi_it, batch_size):
+    """ 
+    Same as fill_batch above, except uses a deque of its instead to represent
+    multiple cells
+    """
 
-        kdtree = spatial.cKDTree(vertices)
-        center_vertex_id = np.random.randint(0, len(vertices))
-        _, valid_vertex_ids = kdtree.query(vertices[center_vertex_id],
-                                           k=n_points, n_jobs=-1)
+    num_added = 0
+    for i in range(batch_size):
+        j, view, center = next_sample(multi_it)
+        if j == -1:
+            break
 
-        if len(valid_vertex_ids) < n_points:
-            valid_vertex_ids = np.arange(len(vertices), dtype=np.int)
+        ind_batch[i] = j
+        view_batch[i,...] = view
+        center_batch[i] = center
+        num_added += 1
 
-        if len(valid_vertex_ids) < n_points:
-            vertex_ids = np.random.choice(valid_vertex_ids, n_points,
-                                          replace=True)
-        elif len(valid_vertex_ids) == n_points:
-            vertex_ids = valid_vertex_ids
-        else:
-            vertex_ids = np.random.choice(valid_vertex_ids, n_points,
-                                          replace=False)
+    return view_batch, center_batch, ind_batch, num_added
 
-        vertices = vertices[vertex_ids]
 
-        # Normalize to unit sphere and mean zero
-        vertices -= np.min(vertices, axis=0)[None]
-        vertices /= np.max(np.linalg.norm(vertices, axis=1))
-        vertices_list.append(vertices)
-        vertex_ids_list.append(center_vertex_id)
+def next_sample(multi_it):
+    """ 
+    Pulls the next sample from a deque of LocalViewIterators 
+    Returns (-1,-1,-1) if no samples are left
+    """
 
-    return np.array(vertices_list, dtype=np.float32),\
-           np.array(vertex_ids_list, dtype=np.int)
+    while len(multi_it) != 0:
+        try: 
+            i, it = multi_it[0]
+            view, center = next(it)
+            multi_it.rotate(-1)
+            return i, view, center
 
-def load_vertex_block_pychg(fnames, center_coords=None, n_points=500,
-                            local_env=True):
-    vertices_list = []
-    vertex_ids_list = []
+        except StopIteration:
+            multi_it.popleft()
 
-    if center_coords is None:
-        center_coords = [None] * len(fnames)
-
-    for i_fname, fname in enumerate(fnames):
-
-        mesh = meshmeta.mesh(fname)
-
-        if local_env:
-            vertices, center_vertex_id = mesh.get_local_view(n_points,
-                                                             center_coord=center_coords[i_fname],
-                                                             pc_align=True,
-                                                             method="kdtree")
-        else:
-            vertices = mesh.vertices[np.random.choice(
-                np.arange(len(mesh.vertices), dtype=np.int), n_points,
-                replace=False)]
-
-        if len(vertices) < n_points:
-            vertices = vertices[np.random.choice(len(vertices), n_points, replace=True)]
-
-        vertices = transform.norm_to_unit_sphere(vertices)
-
-        vertices_list.append(vertices)
-        vertex_ids_list.append(center_vertex_id)
-
-    return np.array(vertices_list, dtype=np.float32),\
-           np.array(vertex_ids_list)
-
+    return -1, -1, -1
+        
+        
