@@ -11,10 +11,10 @@ import torch.optim as optim
 import torch.utils.data
 import tensorboardX
 
-import data
-from data import CellDataset
-import loss
-import utils
+from neuronencodings import data
+from neuronencodings.data import CellDataset
+from neuronencodings import loss
+from neuronencodings import utils
 
 HOME = os.path.expanduser("~")
 THIS_DIR = os.path.dirname(__file__)

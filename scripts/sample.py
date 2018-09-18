@@ -3,7 +3,7 @@ Pulling some samples from a dataset, and saving them to disk for easy viewing
 """
 import os
 
-import data
+from neuronencodings import data
 
 
 def main(dset_descs, num_samples, phase, n_points, local_env,
