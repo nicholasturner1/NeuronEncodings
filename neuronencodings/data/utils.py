@@ -11,8 +11,9 @@ from meshparty import mesh_io
 # Datasets -----------------------
 SVEN_BASE = "seungmount/research/svenmd"
 NICK_BASE = "seungmount/research/Nick/"
+BOTH_BASE = "seungmount/research/nick_and_sven"
 DATASET_DIRS = {
-    "full_cells": [f"{SVEN_BASE}/pointnet_axoness_gt_180223/"],
+    "orig_full_cells": [f"{SVEN_BASE}/pointnet_axoness_gt_180223/"],
 
     "soma_vs_rest": [f"{SVEN_BASE}/pointnet_soma_masked_180401"],
 
@@ -27,7 +28,13 @@ DATASET_DIRS = {
     "orphan_axons_refined": [(f"{SVEN_BASE}"
                               "/pointnet_orphan_axons_gt_180308_refined/")],
 
+    "pinky100_orphan_dends": [(f"{BOTH_BASE}/data/180920_orphan_dends/")],
+
     "fish_refined": [f"{SVEN_BASE}/180831_meshes_ashwin_refined/"],
+
+    "full_cells_unrefined": [(f"{SVEN_BASE}"
+                              "/pointnet_full_semantic_labels"
+                              "_masked_180401")],
 
     "full_cells_refined": [(f"{SVEN_BASE}"
                             "/pointnet_full_semantic_labels"
