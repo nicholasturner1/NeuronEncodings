@@ -11,17 +11,19 @@ import torch.optim as optim
 import torch.utils.data
 import tensorboardX
 
+import neuronencodings as ne
 from neuronencodings import data
 from neuronencodings.data import CellDataset
 from neuronencodings import loss
 from neuronencodings import utils
 
 HOME = os.path.expanduser("~")
-THIS_DIR = os.path.dirname(__file__)
+NE_DIR = os.path.dirname(ne.__file__)
 DEFAULT_EXPT_DIR = f"{HOME}/seungmount/research/nick_and_sven/models_sven/"
 MODULES_TO_RECORD = [__file__,
-                     os.path.join(THIS_DIR, "utils.py"),
-                     os.path.join(THIS_DIR, "data", "cell_dataset.py")]
+                     os.path.join(NE_DIR, "utils.py"),
+                     os.path.join(NE_DIR, "data", "utils.py"),
+                     os.path.join(NE_DIR, "data", "cell_dataset.py")]
 
 # Init / Parser -------------------------
 
