@@ -29,8 +29,7 @@ def encode_mesh_by_views(model, mesh, n_points, batch_size=10,
 
     batch_i = 0
     while True:
-        view_batch, center_batch, new_sz = fill_batch(view_batch, center_batch,
-                                                      it, batch_size)
+        new_sz, view_batch = fill_batch(centers, it, batch_size)
 
         if new_sz == 0:
             break
@@ -38,11 +37,11 @@ def encode_mesh_by_views(model, mesh, n_points, batch_size=10,
         if verbose:
             print(f"batch {batch_i}")
 
-        new_vectors = unpack_batch(predict_batch(model, view_batch))
-        new_centers = unpack_batch(center_batch)
+        # new_vectors = unpack_batch(predict_batch(model, view_batch))
+        # new_centers = unpack_batch(center_batch)
 
-        vectors.extend(new_vectors)
-        centers.extend(new_centers)
+        vectors.extend(predict_batch(model, view_batch))
+        # centers.extend(new_centers)
         batch_i += 1
 
     return vectors, centers
@@ -63,24 +62,24 @@ def predict_batch(model, points):
     return fs.data.cpu().numpy()
 
 
-def fill_batch(view_batch, center_batch, it, n):
+def fill_batch(center_batch, it, n):
     """ 
     Fills as many items in a batch as possible with new views. Leaves
     the rest as-is
     """
 
     num_added = 0
+    view_batch = []
     for i in range(n):
         try:
-            
             view, center = next(it)
-            view_batch[i,...] = view
-            center_batch[i] = center
+            view_batch.append(view)
+            center_batch.append(center)
             num_added += 1
         except StopIteration:
             break
 
-    return view_batch, center_batch, num_added
+    return num_added, np.array(view_batch, dtype=np.float32)
 
 
 def encode_meshs_by_views(model, meshes, n_points, batch_size=10,

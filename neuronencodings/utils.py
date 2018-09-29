@@ -16,8 +16,8 @@ import torch
 from . import models
 
 
-def load_model(model_name, model_args, model_kwargs,
-               chkpt_fname=None, model_dir=None, chkpt_num=None, eval_=False):
+def load_model(model_name, model_args, model_kwargs, chkpt_fname=None,
+               model_dir=None, chkpt_num=None, eval_=False, state_dict=None):
     """ Generalized model loading function """
 
     model_class = getattr(models, model_name)
@@ -33,13 +33,14 @@ def load_model(model_name, model_args, model_kwargs,
 
     if chkpt_fname is not None:
         model.load_state_dict(torch.load(chkpt_fname))
-
+    elif state_dict is not None:
+        model.load_state_dict(state_dict)
     return model
 
 
 def load_autoencoder(model_name, n_pts=2500, pt_dim=3, bottle_fs=128,
-                     bn=True, eval_=False,
-                     chkpt_fname=None, model_dir=None, chkpt_num=None):
+                     bn=True, eval_=False, chkpt_fname=None, model_dir=None,
+                     chkpt_num=None, state_dict=None):
     """
     A specific loading function for autoencoders with a standard set
     of arguments (the usual case)
@@ -49,7 +50,8 @@ def load_autoencoder(model_name, n_pts=2500, pt_dim=3, bottle_fs=128,
 
     return load_model(model_name, list(), model_kwargs,
                       model_dir=model_dir, chkpt_num=chkpt_num,
-                      chkpt_fname=chkpt_fname, eval_=eval_)
+                      chkpt_fname=chkpt_fname, eval_=eval_,
+                      state_dict=state_dict)
 
 
 def make_required_dirs(expt_dir, expt_name):

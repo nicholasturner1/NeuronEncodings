@@ -30,6 +30,8 @@ DATASET_DIRS = {
 
     "pinky100_orphan_dends": [(f"{BOTH_BASE}/data/180920_orphan_dends/")],
 
+    "orphan_axons_pinky100": [(f"{SVEN_BASE}/InhAnalysis/meshes_put_axon/")],
+
     "fish_refined": [f"{SVEN_BASE}/180831_meshes_ashwin_refined/"],
 
     "full_cells_unrefined": [(f"{SVEN_BASE}"
