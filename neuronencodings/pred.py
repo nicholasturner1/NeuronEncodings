@@ -39,7 +39,7 @@ def encode_mesh_by_views(model, mesh, n_points, batch_size=10,
             print(f"batch {batch_i}")
 
         new_vectors = unpack_batch(predict_batch(model, view_batch))
-        new_centers = unpack_batch(center_batch)
+        new_centers = unpack_batch(center_batch.copy())
 
         vectors.extend(new_vectors)
         centers.extend(new_centers)
@@ -108,7 +108,7 @@ def encode_meshs_by_views(model, meshes, n_points, batch_size=10,
 
     batch_i = 0
     while True:
-        (view_batch, center_batch, id_batch, new_sz) = \
+        (view_batch, center_batch, ind_batch, new_sz) = \
             fill_multi_it_batch(view_batch, center_batch, ind_batch, 
                                 multi_it, batch_size)
 
@@ -119,9 +119,9 @@ def encode_meshs_by_views(model, meshes, n_points, batch_size=10,
             print(f"batch {batch_i}")
 
         new_vectors = unpack_batch(predict_batch(model, view_batch))
-        new_centers = unpack_batch(center_batch)
+        new_centers = unpack_batch(center_batch.copy())
 
-        for (i,v) in enumerate(ind_batch):
+        for (i,v) in enumerate(ind_batch[:new_sz]):
             vectors[v].append(new_vectors[i])
             centers[v].append(new_centers[i])
         batch_i += 1
