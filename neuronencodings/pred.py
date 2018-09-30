@@ -6,6 +6,8 @@ import torch
 
 from meshparty import iterator
 
+from .data import transform
+
 
 def encode_mesh_by_views(model, mesh, n_points, batch_size=10, 
                          order="random", pc_align=False, method="kdtree", 
@@ -74,6 +76,7 @@ def fill_batch(view_batch, center_batch, it, n):
         try:
             
             view, center = next(it)
+            view = transform.norm_to_unit_sphere(view)
             view_batch[i,...] = view
             center_batch[i] = center
             num_added += 1
@@ -160,6 +163,7 @@ def next_sample(multi_it):
         try: 
             i, it = multi_it[0]
             view, center = next(it)
+            view = transform.norm_to_unit_sphere(view)
             multi_it.rotate(-1)
             return i, view, center
 
