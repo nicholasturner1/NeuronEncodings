@@ -42,11 +42,13 @@ parser.add_argument('--nepoch', type=int, default=20000,
 parser.add_argument('--expt_dir', type=str, default=DEFAULT_EXPT_DIR,
                     help='experiment folder')
 parser.add_argument('--chkpt_num', type=int, default=None,
-                    help='chkpt at which to continue neuronencodings')
+                    help='chkpt at which to continue training')
 parser.add_argument('--gpus', nargs="+", default=["0"],
                     help='gpu ids')
 parser.add_argument('--n_points', type=int, default=250,
                     help='number of points for each sample')
+parser.add_argument('--point_dim', type=int, default=3,
+                    help='dimensionality of each input point')
 parser.add_argument('--bottle_fs', type=int, default=64,
                     help='number of latent vars (size of max pool layers)')
 parser.add_argument('--nobn', action="store_true",
@@ -55,6 +57,8 @@ parser.add_argument('--lr', type=float, default=0.001,
                     help='learning rate')
 parser.add_argument('--lr_decay', type=float, default=0.95,
                     help='learning rate decay every 10 epochs')
+parser.add_argument('--nonorm', action="store_false",
+                    help='do not normalize points to unit sphere')
 parser.add_argument('--rotation', action="store_true",
                     help='augment with rotation')
 parser.add_argument('--jitter', action="store_true",
@@ -109,6 +113,7 @@ train_dset = CellDataset(gt_dirs=gt_dirs,
                          apply_scaling=opt.scaling,
                          apply_chopping=opt.chopping,
                          apply_movement=opt.movement,
+                         apply_norm=not(opt.nonorm),
                          train_split=opt.train_split,
                          val_split=opt.val_split,
                          test_split=opt.test_split,
@@ -131,6 +136,7 @@ val_dset = CellDataset(gt_dirs=gt_dirs,
                        apply_scaling=False,
                        apply_chopping=False,
                        apply_movement=False,
+                       apply_norm=not(opt.nonorm),
                        train_split=opt.train_split,
                        val_split=opt.val_split,
                        test_split=opt.test_split,
@@ -163,7 +169,7 @@ utils.set_gpus(opt.gpus)
 # Train ----------------------------------
 print("Setting up training")
 
-model = utils.load_autoencoder(opt.model_name,
+model = utils.load_autoencoder(opt.model_name, pt_dim=opt.point_dim,
                                n_pts=opt.n_points, bottle_fs=opt.bottle_fs,
                                bn=not(opt.nobn), model_dir=model_dir,
                                chkpt_num=opt.chkpt_num)

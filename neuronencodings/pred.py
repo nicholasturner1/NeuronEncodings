@@ -9,10 +9,10 @@ from meshparty import iterator
 from .data import transform
 
 
-def encode_mesh_by_views(model, mesh, n_points, batch_size=10, 
-                         order="random", pc_align=False, method="kdtree", 
-                         verbose=False, pt_dim=3):
-    """ 
+def encode_mesh_by_views(model, mesh, n_points, batch_size=10,
+                         order="random", pc_align=False, method="kdtree",
+                         verbose=False, pt_dim=3, pc_norm=True):
+    """
     Runs inference over the local views of a single mesh. Assumes that you have
     at least one full batch worth of local views (otherwise the inference will output
     strange values
@@ -21,13 +21,13 @@ def encode_mesh_by_views(model, mesh, n_points, batch_size=10,
     # buffer to hold a batch of local views/centers
     view_batch = np.empty((batch_size, n_points, pt_dim), dtype=np.float32)
     center_batch = np.empty((batch_size, ), dtype=np.uint32)
-    
+
     # record of all inferred vectors and centers so far
     vectors, centers = list(), list()
 
-    it = iterator.LocalViewIterator(mesh, n_points, order=order, 
+    it = iterator.LocalViewIterator(mesh, n_points, order=order,
                                     pc_align=pc_align, method=method,
-                                    verbose=False)
+                                    verbose=False, pc_norm=pc_norm)
 
     batch_i = 0
     while True:
@@ -56,7 +56,7 @@ def unpack_batch(batch):
 
 
 def predict_batch(model, points):
-    """ Runs inference on a batch of points """ 
+    """ Runs inference on a batch of points """
 
     points_tensor = torch.from_numpy(points).cuda()
 
@@ -66,7 +66,7 @@ def predict_batch(model, points):
 
 
 def fill_batch(view_batch, center_batch, it, n):
-    """ 
+    """
     Fills as many items in a batch as possible with new views. Leaves
     the rest as-is
     """
@@ -74,7 +74,6 @@ def fill_batch(view_batch, center_batch, it, n):
     num_added = 0
     for i in range(n):
         try:
-            
             view, center = next(it)
             view = transform.norm_to_unit_sphere(view)
             view_batch[i,...] = view
@@ -88,8 +87,8 @@ def fill_batch(view_batch, center_batch, it, n):
 
 def encode_meshs_by_views(model, meshes, n_points, batch_size=10,
                           order="random", pc_align=False, method="kdtree",
-                          verbose=False, pt_dim=3):
-    """ 
+                          verbose=False, pt_dim=3, pc_norm=True):
+    """
     Runs inference over the local views of multiple meshes. Assumes that you have
     at least one full batch worth of local views (otherwise the inference will output
     strange values
@@ -102,7 +101,8 @@ def encode_meshs_by_views(model, meshes, n_points, batch_size=10,
 
     its = [iterator.LocalViewIterator(mesh, n_points, order=order,
                                       pc_align=pc_align, method=method,
-                                      verbose=False) for mesh in meshes]
+                                      verbose=False, pc_norm=pc_norm) 
+           for mesh in meshes]
     multi_it = collections.deque(list(enumerate(its)))
 
     # record of the inferred vectors and centers
@@ -112,7 +112,7 @@ def encode_meshs_by_views(model, meshes, n_points, batch_size=10,
     batch_i = 0
     while True:
         (view_batch, center_batch, ind_batch, new_sz) = \
-            fill_multi_it_batch(view_batch, center_batch, ind_batch, 
+            fill_multi_it_batch(view_batch, center_batch, ind_batch,
                                 multi_it, batch_size)
 
         if new_sz == 0:
@@ -132,9 +132,9 @@ def encode_meshs_by_views(model, meshes, n_points, batch_size=10,
     return vectors, centers
 
 
-def fill_multi_it_batch(view_batch, center_batch, ind_batch, 
+def fill_multi_it_batch(view_batch, center_batch, ind_batch,
                         multi_it, batch_size):
-    """ 
+    """
     Same as fill_batch above, except uses a deque of its instead to represent
     multiple cells
     """
@@ -154,13 +154,13 @@ def fill_multi_it_batch(view_batch, center_batch, ind_batch,
 
 
 def next_sample(multi_it):
-    """ 
-    Pulls the next sample from a deque of LocalViewIterators 
+    """
+    Pulls the next sample from a deque of LocalViewIterators
     Returns (-1,-1,-1) if no samples are left
     """
 
     while len(multi_it) != 0:
-        try: 
+        try:
             i, it = multi_it[0]
             view, center = next(it)
             view = transform.norm_to_unit_sphere(view)
@@ -171,5 +171,3 @@ def next_sample(multi_it):
             multi_it.popleft()
 
     return -1, -1, -1
-        
-        

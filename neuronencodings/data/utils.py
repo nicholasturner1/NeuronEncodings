@@ -42,6 +42,14 @@ DATASET_DIRS = {
                             "/pointnet_full_semantic_labels"
                             "_masked_180401_refined/")],
 
+    "pinky100_orphan_dend_features": [(f"{BOTH_BASE}"
+                                       "/models_nick/p100_dend_outer"
+                                       "/inference/proj32/")],
+
+    "pinky100_orphan_dend_features_32": [(f"{BOTH_BASE}"
+                                         "/models_nick/p100_dend_outer_32"
+                                         "/inference/")],
+
     "default": [f"{SVEN_BASE}/pointnet_axoness_gt_rfc_based_masked_180322/",
                 f"{SVEN_BASE}/pointnet_orphan_axons_gt_180308/",
                 f"{SVEN_BASE}/pointnet_orphan_dendrites_gt_180308/"]

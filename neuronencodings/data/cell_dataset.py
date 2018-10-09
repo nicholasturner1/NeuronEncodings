@@ -28,7 +28,7 @@ class CellDataset(data.Dataset):
     def __init__(self, gt_dirs, n_points=2500, phase=Phase.TRAIN,
                  random_seed=0, train_split=0.8, val_split=0.1, test_split=0.1,
                  local_env=True, apply_jitter=False, apply_rotation=False,
-                 apply_scaling=False, apply_movement=False,
+                 apply_scaling=False, apply_movement=False, apply_norm=True,
                  apply_chopping=False, n_max_meshes_per_dataset=None):
         self._gt_dirs = gt_dirs
         self._n_max_meshes_per_dataset = n_max_meshes_per_dataset
@@ -37,6 +37,7 @@ class CellDataset(data.Dataset):
         self._n_points = n_points
 
         self._local_env = local_env
+        self._apply_norm = apply_norm
         self._apply_jitter = apply_jitter
         self._apply_rotation = apply_rotation
         self._apply_scaling = apply_scaling
@@ -74,6 +75,10 @@ class CellDataset(data.Dataset):
     @property
     def local_env(self):
         return self._local_env
+
+    @property
+    def apply_norm(self):
+        return self._apply_norm
 
     @property
     def apply_jitter(self):
@@ -161,6 +166,9 @@ class CellDataset(data.Dataset):
 
         mesh = self.meshmeta.mesh(mesh_fname)
 
+        if mesh.vertices is None:
+            print(f"WARNING: {mesh_fname} has no vertices")
+
         if self.local_env:
             vertices, _ = mesh.get_local_view(self.n_points, pc_align=True,
                                               method="kdtree")
@@ -173,7 +181,8 @@ class CellDataset(data.Dataset):
             vertices = transform.random_sample(vertices, self.n_points)
 
         # Normalize to unit sphere and mean zero
-        vertices = transform.norm_to_unit_sphere(vertices)
+        if self.apply_norm:
+            vertices = transform.norm_to_unit_sphere(vertices)
 
         # Apply augmentations
         if self.apply_rotation:

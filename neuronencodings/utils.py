@@ -29,7 +29,7 @@ def load_model(model_name, model_args, model_kwargs, chkpt_fname=None,
         model.cuda()
 
     if (model_dir is not None) and (chkpt_num is not None):
-        chkpt_fname = f"{model_dir}/model_{iter}.chkpt"
+        chkpt_fname = f"{model_dir}/model_{chkpt_num}.chkpt"
 
     if chkpt_fname is not None:
         model.load_state_dict(torch.load(chkpt_fname))
