@@ -87,7 +87,7 @@ def fill_batch(view_batch, center_batch, it, n):
 
 def encode_meshs_by_views(model, meshes, n_points, batch_size=10,
                           order="random", pc_align=False, method="kdtree",
-                          verbose=False, pt_dim=3, pc_norm=True):
+                          verbose=False, pt_dim=3, pc_norm=True, unit_norm=True):
     """
     Runs inference over the local views of multiple meshes. Assumes that you have
     at least one full batch worth of local views (otherwise the inference will output
@@ -113,7 +113,7 @@ def encode_meshs_by_views(model, meshes, n_points, batch_size=10,
     while True:
         (view_batch, center_batch, ind_batch, new_sz) = \
             fill_multi_it_batch(view_batch, center_batch, ind_batch,
-                                multi_it, batch_size)
+                                multi_it, batch_size, unit_norm)
 
         if new_sz == 0:
             break
@@ -133,7 +133,7 @@ def encode_meshs_by_views(model, meshes, n_points, batch_size=10,
 
 
 def fill_multi_it_batch(view_batch, center_batch, ind_batch,
-                        multi_it, batch_size):
+                        multi_it, batch_size, unit_norm=True):
     """
     Same as fill_batch above, except uses a deque of its instead to represent
     multiple cells
@@ -141,9 +141,13 @@ def fill_multi_it_batch(view_batch, center_batch, ind_batch,
 
     num_added = 0
     for i in range(batch_size):
-        j, view, center = next_sample(multi_it)
+        j, view, center = next_sample(multi_it, unit_norm)
         if j == -1:
             break
+
+        #if there are fewer points than needed for a batch
+        if view.shape[0] < view_batch.shape[1]:
+            view = transform.random_sample(view, view_batch.shape[1])
 
         ind_batch[i] = j
         view_batch[i,...] = view
@@ -153,7 +157,7 @@ def fill_multi_it_batch(view_batch, center_batch, ind_batch,
     return view_batch, center_batch, ind_batch, num_added
 
 
-def next_sample(multi_it):
+def next_sample(multi_it, unit_norm=True):
     """
     Pulls the next sample from a deque of LocalViewIterators
     Returns (-1,-1,-1) if no samples are left
@@ -163,7 +167,8 @@ def next_sample(multi_it):
         try:
             i, it = multi_it[0]
             view, center = next(it)
-            view = transform.norm_to_unit_sphere(view)
+            if unit_norm:
+                view = transform.norm_to_unit_sphere(view)
             multi_it.rotate(-1)
             return i, view, center
 
