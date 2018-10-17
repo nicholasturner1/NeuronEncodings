@@ -14,9 +14,9 @@ from torch import autograd
 class PointNetAE(nn.Module):
 
     def __init__(self, n_pts, pt_dim=3,
-                 mlp1_fs=[512,256,256, 128],
+                 mlp1_fs=[512, 256, 256, 128],
                  bottle_fs=128,
-                 mlp2_fs=[128,256,256,512],
+                 mlp2_fs=[128, 256, 256, 512],
                  bn=True, bn_decay=None, act=F.relu):
         """
         channels_in - dimension on input points
@@ -41,16 +41,16 @@ class PointNetAE(nn.Module):
         # Layers
         self.mlp1 = ConvMLP(pt_dim, *mlp1_fs, bottle_fs,
                             act=self.act, bn=self.bn)
-        self.maxpool = nn.MaxPool1d(n_pts)
+        self.maxpool = F.max_pool1d
         self.mlp2 = LinearMLP(bottle_fs, *mlp2_fs,
                               act=self.act, bn=self.bn)
         self.output = linear(mlp2_fs[-1],n_pts*pt_dim, 1) #no activation fn here
 
     def forward(self, x):
         #expect input of size (batch_size, n_pts, pt_dim)
-        batch_size = x.size()[0]
+        batch_size, n_pts = x.size()[:2]
         x = x.transpose(2,1)
-        x = self.maxpool(self.mlp1(x))
+        x = self.maxpool(self.mlp1(x), n_pts)
         global_fs = x.view(batch_size,-1)
         x = self.output(self.mlp2(global_fs))
         return x.view(batch_size, self.n_pts, self.pt_dim), global_fs
