@@ -57,7 +57,7 @@ parser.add_argument('--lr', type=float, default=0.001,
                     help='learning rate')
 parser.add_argument('--lr_decay', type=float, default=0.95,
                     help='learning rate decay every 10 epochs')
-parser.add_argument('--nonorm', action="store_false",
+parser.add_argument('--nonorm', action="store_true",
                     help='do not normalize points to unit sphere')
 parser.add_argument('--rotation', action="store_true",
                     help='augment with rotation')
