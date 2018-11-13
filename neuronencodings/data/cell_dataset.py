@@ -166,7 +166,7 @@ class CellDataset(data.Dataset):
 
         mesh = self.meshmeta.mesh(mesh_fname)
 
-        if mesh.vertices is None:
+        if mesh is None:
             print(f"WARNING: {mesh_fname} has no vertices")
 
         if self.local_env:

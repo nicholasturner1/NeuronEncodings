@@ -39,7 +39,7 @@ def pca(features, ndims=10):
     pca = decomposition.PCA(n_components=ndims)
     features_t = pca.fit_transform(features_n)
 
-    return features_t
+    return features_t, pca
 
 
 def tsne(features, ndims=3):
@@ -54,5 +54,5 @@ def tsne(features, ndims=3):
     tsne = manifold.TSNE(n_components=ndims)
     features_t = tsne.fit_transform(features_n)
 
-    return features_t
+    return features_t, tsne
 
