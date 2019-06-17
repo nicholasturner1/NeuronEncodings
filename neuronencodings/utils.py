@@ -8,6 +8,10 @@ import shutil
 import datetime
 import importlib
 import types
+import json
+import glob
+import re
+import numpy as np
 
 import h5py
 
@@ -30,28 +34,59 @@ def load_model(model_name, model_args, model_kwargs, chkpt_fname=None,
 
     if (model_dir is not None) and (chkpt_num is not None):
         chkpt_fname = f"{model_dir}/model_{chkpt_num}.chkpt"
-
-    if chkpt_fname is not None:
         model.load_state_dict(torch.load(chkpt_fname))
     elif state_dict is not None:
         model.load_state_dict(state_dict)
+    elif chkpt_fname is not None:
+        model.load_state_dict(torch.load(chkpt_fname))
+
     return model
 
 
-def load_autoencoder(model_name, n_pts=2500, pt_dim=3, bottle_fs=128,
-                     bn=True, eval_=False, chkpt_fname=None, model_dir=None,
-                     chkpt_num=None, state_dict=None):
+def load_autoencoder(model_name, n_points=2500, pt_dim=3, bottle_fs=128,
+                     conv_layers=[128, 64], mlp_layers=[24, 48, 96, 192, 384],
+                     act="relu", bn=True, eval_=False, chkpt_fname=None,
+                     model_dir=None, chkpt_num=None, state_dict=None, gpu=0,
+                     **kwargs):
     """
     A specific loading function for autoencoders with a standard set
     of arguments (the usual case)
     """
 
-    model_kwargs = dict(n_pts=n_pts, pt_dim=pt_dim, bottle_fs=bottle_fs, bn=bn)
+    model_kwargs = dict(n_pts=n_points, pt_dim=pt_dim, bottle_fs=bottle_fs,
+                        mlp1_fs=conv_layers, mlp2_fs=mlp_layers,
+                        act=act, bn=bn)
 
+    set_gpus(str(gpu))
     return load_model(model_name, list(), model_kwargs,
                       model_dir=model_dir, chkpt_num=chkpt_num,
                       chkpt_fname=chkpt_fname, eval_=eval_,
                       state_dict=state_dict)
+
+
+def load_autoencoder_from_file(model_path, **kwargs):
+    param_paths = glob.glob(
+        f"{os.path.dirname(os.path.dirname(model_path))}/logs/*params.json")
+
+    time_stamps = []
+    for p in param_paths:
+        time_stamp = re.findall("[\d_]+", p)[-1][:-1]
+        time_stamp = datetime.datetime.strptime(time_stamp, "%d%m%y_%H%M%S")
+        time_stamps.append(time_stamp)
+
+    param_path = param_paths[np.argmax(time_stamps)]
+
+    with open(param_path, 'r') as f:
+        j = f.read()
+
+    params = json.loads(j)
+    params["bn"] = not params["nobn"]
+
+    load_params = params.copy()
+    load_params.update(kwargs)
+
+    model = load_autoencoder(chkpt_fname=model_path, eval_=True, **load_params)
+    return model, params
 
 
 def make_required_dirs(expt_dir, expt_name):
@@ -100,11 +135,10 @@ def save_args(args_obj, log_dir, tstamp=None):
     if tstamp is None:
         tstamp = timestamp()
 
-    output_fname = os.path.join(log_dir, "{}_params.csv".format(tstamp))
-
-    with open(output_fname, "w+") as f:
-        for (k, v) in vars(args_obj).items():
-            f.write("{k}:{v}\n".format(k=k, v=v))
+    j = json.dumps(vars(args_obj), sort_keys=True, indent=4,
+                   ensure_ascii=False)
+    with open(f"{log_dir}/{tstamp}_params.json", 'w') as f:
+        f.write(j)
 
 
 def set_gpus(gpu_list):

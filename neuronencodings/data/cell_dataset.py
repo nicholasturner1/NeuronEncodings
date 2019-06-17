@@ -4,13 +4,15 @@ Cell Dataset Class - Primary interface to mesh data
 import os
 import random
 import enum
+import time
 
 import numpy as np
 
 import torch
 import torch.utils.data as data
 
-from meshparty import mesh_io
+from meshparty import trimesh_io
+
 
 from . import transform
 from . import utils
@@ -25,19 +27,26 @@ class Phase(enum.Enum):
 
 
 class CellDataset(data.Dataset):
-    def __init__(self, gt_dirs, n_points=2500, phase=Phase.TRAIN,
+    def __init__(self, gt_dirs, n_points=2500, sample_n_points=2500, phase=Phase.TRAIN,
                  random_seed=0, train_split=0.8, val_split=0.1, test_split=0.1,
                  local_env=True, apply_jitter=False, apply_rotation=False,
                  apply_scaling=False, apply_movement=False, apply_norm=True,
-                 apply_chopping=False, n_max_meshes_per_dataset=None):
+                 adaptnorm=False, fisheye=False, apply_chopping=False,
+                 n_max_meshes_per_dataset=None):
         self._gt_dirs = gt_dirs
         self._n_max_meshes_per_dataset = n_max_meshes_per_dataset
         self._gt_files = None  # lazily populated
 
         self._n_points = n_points
+        self._sample_n_points = sample_n_points
 
         self._local_env = local_env
-        self._apply_norm = apply_norm
+        self._adaptnorm = adaptnorm
+        if adaptnorm:
+            self._apply_norm = False
+        else:
+            self._apply_norm = apply_norm
+        self._fisheye = fisheye
         self._apply_jitter = apply_jitter
         self._apply_rotation = apply_rotation
         self._apply_scaling = apply_scaling
@@ -54,7 +63,7 @@ class CellDataset(data.Dataset):
         self._val_files = []
         self._test_files = []
 
-        self.meshmeta = mesh_io.MeshMeta()
+        self.meshmeta = trimesh_io.MeshMeta()
 
         self._random_seed = random_seed
         np.random.seed(random_seed)
@@ -73,12 +82,24 @@ class CellDataset(data.Dataset):
         return self._n_points
 
     @property
+    def sample_n_points(self):
+        return self._sample_n_points
+
+    @property
     def local_env(self):
         return self._local_env
 
     @property
     def apply_norm(self):
         return self._apply_norm
+
+    @property
+    def adaptnorm(self):
+        return self._adaptnorm
+
+    @property
+    def fisheye(self):
+        return self._fisheye
 
     @property
     def apply_jitter(self):
@@ -130,17 +151,15 @@ class CellDataset(data.Dataset):
 
     @property
     def gt_files(self):
-        if self._gt_files is not None:
-            return self._gt_files
+        if self._gt_files is None:
+            self._gt_files = []
+            for gt_dir in self.gt_dirs:
+                dir_paths = utils.files_from_dir(gt_dir)
 
-        self._gt_files = []
-        for gt_dir in self.gt_dirs:
-            dir_paths = utils.files_from_dir(gt_dir)
+                if self.n_max_meshes_per_dataset is not None:
+                    dir_paths = dir_paths[: self.n_max_meshes_per_dataset]
 
-            if self.n_max_meshes_per_dataset is not None:
-                dir_paths = dir_paths[: self.n_max_meshes_per_dataset]
-
-            self._gt_files += dir_paths
+                self._gt_files += dir_paths
 
         return self._gt_files
 
@@ -155,6 +174,8 @@ class CellDataset(data.Dataset):
             return len(self._valid_files)
 
     def __getitem__(self, index):
+        time_start = time.time()
+
         if self._phase == Phase.TRAIN:
             mesh_fname = self._train_files[index]
         elif self._phase == Phase.VAL:
@@ -164,20 +185,26 @@ class CellDataset(data.Dataset):
         else:   # default phase == Phase.FULL
             mesh_fname = self._valid_files[index]
 
-        mesh = self.meshmeta.mesh(mesh_fname)
+        # print(f"loading {mesh_fname}")
+        mesh = self.meshmeta.mesh(mesh_fname, merge_large_components=False)
+        # print(f"loaded {mesh_fname}")
 
         if mesh is None:
             print(f"WARNING: {mesh_fname} has no vertices")
 
         if self.local_env:
             vertices, _ = mesh.get_local_view(self.n_points, pc_align=True,
-                                              method="kdtree")
+                                              pc_norm=False, method="kdtree",
+                                              adapt_unit_sphere_norm=self.adaptnorm,
+                                              fisheye=self.fisheye,
+                                              sample_n_points=self.sample_n_points)
+            vertices = vertices.squeeze()
         else:
             vertices = transform.random_sample(mesh.vertices, self.n_points)
 
         if len(vertices) < self.n_points:
             # can get here if the whole mesh is too small and we take a
-            # local env (?)
+            # local env (?) --> yes
             vertices = transform.random_sample(vertices, self.n_points)
 
         # Normalize to unit sphere and mean zero
@@ -195,7 +222,7 @@ class CellDataset(data.Dataset):
             vertices = transform.translate(vertices)
 
         vertices = torch.from_numpy(vertices.astype(np.float32))
-
+        # print(f"extracted points {mesh_fname} in %.3fs" % (time.time() - time_start))
         return vertices
 
     def _pick_files(self):

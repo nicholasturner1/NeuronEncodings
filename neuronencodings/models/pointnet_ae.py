@@ -10,14 +10,16 @@ from torch import nn
 from torch.nn import functional as F
 from torch import autograd
 
+torch_acts = {"relu": F.relu}
+
 
 class PointNetAE(nn.Module):
 
     def __init__(self, n_pts, pt_dim=3,
-                 mlp1_fs=[512, 256, 256, 128],
-                 bottle_fs=128,
-                 mlp2_fs=[128, 256, 256, 512],
-                 bn=True, bn_decay=None, act=F.relu):
+                 mlp1_fs=[128, 64],
+                 bottle_fs=64,
+                 mlp2_fs=[24, 48, 96, 192, 384],
+                 bn=True, act="relu"):
         """
         channels_in - dimension on input points
         channels_out - dimension of outputs
@@ -32,38 +34,47 @@ class PointNetAE(nn.Module):
         self.pt_dim = pt_dim
         self.bottle_fs = bottle_fs
         self.bn = bn
-        self.act = act
-        self.bn_decay = bn_decay #not used yet
-
-        #scaling mlp2 units for pt_dim
-        mlp2_fs = [fs*pt_dim for fs in mlp2_fs]
+        self.act = torch_acts[act]
 
         # Layers
         self.mlp1 = ConvMLP(pt_dim, *mlp1_fs, bottle_fs,
                             act=self.act, bn=self.bn)
+
         self.maxpool = F.max_pool1d
+
         self.mlp2 = LinearMLP(bottle_fs, *mlp2_fs,
                               act=self.act, bn=self.bn)
-        self.output = linear(mlp2_fs[-1],n_pts*pt_dim, 1) #no activation fn here
+
+        self.output = linear(mlp2_fs[-1], n_pts * pt_dim, 1) #no activation fn here
 
     def forward(self, x):
         #expect input of size (batch_size, n_pts, pt_dim)
         batch_size, n_pts = x.size()[:2]
-        x = x.transpose(2,1)
+
+        x = x.transpose(2, 1)
+
         x = self.maxpool(self.mlp1(x), n_pts)
-        global_fs = x.view(batch_size,-1)
+
+        global_fs = x.view(batch_size, -1)
+
         x = self.output(self.mlp2(global_fs))
         return x.view(batch_size, self.n_pts, self.pt_dim), global_fs
 
     def forward_global(self, x):
-        x = x.transpose(2,1)
+        x = x.transpose(2, 1)
         x = self.mlp1(x)
-        return x.max(1) #? to test
+
+        return x.max(2)
+
+    def forward_decoder(self, x):
+        batch_size = x.size()[0]
+
+        x = self.output(self.mlp2(x))
+        return x.view(batch_size, self.n_pts, self.pt_dim)
 
 
 class ConvMLP(nn.Module):
-
-    def __init__(self, *layer_channels, bn=False, act=F.relu, bn_decay=None):
+    def __init__(self, *layer_channels, bn=False, act=F.relu):
 
         assert len(layer_channels) > 1, "need more than one channel"
         self.num_layers = len(layer_channels)
@@ -72,7 +83,7 @@ class ConvMLP(nn.Module):
 
         nn.Module.__init__(self)
 
-        for i in range(1,self.num_layers):
+        for i in range(1, self.num_layers):
             c_in, c_out = layer_channels[i-1], layer_channels[i]
 
             layer_name = "conv{}".format(i)
@@ -83,9 +94,9 @@ class ConvMLP(nn.Module):
                 self.add_module(bn_name, nn.BatchNorm1d(c_out))
 
     def forward(self, x):
-        for i in range(1,self.num_layers):
-            x = getattr(self,"conv{}".format(i))(x)
-            x = getattr(self,"bn{}".format(i))(x) if self.bn else x
+        for i in range(1, self.num_layers):
+            x = getattr(self, "conv{}".format(i))(x)
+            x = getattr(self, "bn{}".format(i))(x) if self.bn else x
             x = self.act(x)
         return x
 
@@ -102,8 +113,7 @@ def conv(channels_in, channels_out, ks, bias=True):
 
 
 class LinearMLP(nn.Module):
-
-    def __init__(self, *layer_channels, bn=False, act=F.relu, bn_decay=None):
+    def __init__(self, *layer_channels, bn=False, act=F.relu):
 
         assert len(layer_channels) > 1, "need more than one channel"
         self.num_layers = len(layer_channels)
@@ -112,7 +122,7 @@ class LinearMLP(nn.Module):
 
         nn.Module.__init__(self)
 
-        for i in range(1,self.num_layers):
+        for i in range(1, self.num_layers):
             c_in, c_out = layer_channels[i-1], layer_channels[i]
 
             layer_name = "layer{}".format(i)
@@ -123,7 +133,7 @@ class LinearMLP(nn.Module):
                 self.add_module(bn_name, nn.BatchNorm1d(c_out))
 
     def forward(self, x):
-        for i in range(1,self.num_layers):
+        for i in range(1, self.num_layers):
             x = getattr(self, "layer{}".format(i))(x)
             x = getattr(self, "bn{}".format(i))(x) if self.bn else x
             x = self.act(x)

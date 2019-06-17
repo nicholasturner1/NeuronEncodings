@@ -6,13 +6,57 @@ import torch
 
 from meshparty import iterator
 
-from .data import transform
+from neuronencodings.data import transform
 
 
-def encode_mesh_by_views(model, mesh, n_points, batch_size=10,
-                         order="random", pc_align=False, method="kdtree",
-                         verbose=False, pt_dim=3, pc_norm=True):
+def encode_mesh_by_views_skel(model, mesh, n_points, centers,
+                              sample_n_points=None, batch_size=10,
+                              pc_align=False, verbose=False,
+                              pt_dim=3, fisheye=False, pc_norm=False,
+                              adaptnorm=False):
     """
+    Runs inference over the local views of a single mesh. Assumes that you have
+    at least one full batch worth of local views (otherwise the inference will output
+    strange values
+    """
+
+    # buffer to hold a batch of local views/centers
+    view_batch = np.empty((batch_size, n_points, pt_dim), dtype=np.float32)
+
+    # record of all inferred vectors and centers so far
+    vectors = []
+
+    for batch_i in range(int(np.ceil(len(centers) / batch_size))):
+        if verbose:
+            print(f"batch {batch_i}")
+
+        batch_centers = centers[batch_i * batch_size:
+                                (batch_i + 1) * batch_size]
+
+        views, _ = mesh.get_local_views(
+            center_coords=batch_centers, n_points=n_points,
+            sample_n_points=sample_n_points, pc_align=pc_align, pc_norm=pc_norm,
+            fisheye=fisheye, adapt_unit_sphere_norm=adaptnorm)
+
+        view_batch[:len(views)] = views
+
+        if ~adaptnorm:
+            view_batch = transform.norm_to_unit_sphere_many(view_batch)
+
+        new_vectors = unpack_batch(predict_batch(model, view_batch))[:len(views)]
+
+        vectors.extend(new_vectors)
+        batch_i += 1
+
+    return vectors
+
+
+
+def encode_mesh_by_views(model, mesh, n_points, sample_n_points=None, batch_size=10,
+                         order="random", pc_align=False, method="kdtree", 
+                         verbose=False, max_samples=None, pt_dim=3,
+                         fisheye=False, pc_norm=False, adaptnorm=False):
+    """ 
     Runs inference over the local views of a single mesh. Assumes that you have
     at least one full batch worth of local views (otherwise the inference will output
     strange values
@@ -26,13 +70,17 @@ def encode_mesh_by_views(model, mesh, n_points, batch_size=10,
     vectors, centers = list(), list()
 
     it = iterator.LocalViewIterator(mesh, n_points, order=order,
-                                    pc_align=pc_align, method=method,
+                                    sample_n_points=sample_n_points,
+                                    batch_size=batch_size,
+                                    adaptnorm=adaptnorm,
+                                    fisheye=fisheye,
+                                    pc_align=pc_align,
                                     verbose=False, pc_norm=pc_norm)
 
     batch_i = 0
     while True:
-        view_batch, center_batch, new_sz = fill_batch(view_batch, center_batch,
-                                                      it, batch_size)
+        new_sz = fill_batch_it(view_batch, center_batch, it,
+                               norm_unit_sphere=~adaptnorm)
 
         if new_sz == 0:
             break
@@ -46,6 +94,10 @@ def encode_mesh_by_views(model, mesh, n_points, batch_size=10,
         vectors.extend(new_vectors)
         centers.extend(new_centers)
         batch_i += 1
+
+        if max_samples is not None:
+            if len(vectors) >= max_samples:
+                break
 
     return vectors, centers
 
@@ -65,24 +117,22 @@ def predict_batch(model, points):
     return fs.data.cpu().numpy()
 
 
-def fill_batch(view_batch, center_batch, it, n):
+def fill_batch_it(view_batch, center_batch, it, norm_unit_sphere=True):
     """
     Fills as many items in a batch as possible with new views. Leaves
     the rest as-is
     """
+    try:
+        views, centers = next(it)
 
-    num_added = 0
-    for i in range(n):
-        try:
-            view, center = next(it)
-            view = transform.norm_to_unit_sphere(view)
-            view_batch[i,...] = view
-            center_batch[i] = center
-            num_added += 1
-        except StopIteration:
-            break
+        if norm_unit_sphere:
+            views = transform.norm_to_unit_sphere_many(views)
 
-    return view_batch, center_batch, num_added
+        view_batch[:len(views), ...] = views
+        center_batch[:len(centers)] = centers
+        return len(views)
+    except StopIteration:
+        return 0
 
 
 def encode_meshs_by_views(model, meshes, n_points, batch_size=10,
@@ -100,8 +150,9 @@ def encode_meshs_by_views(model, meshes, n_points, batch_size=10,
     ind_batch = np.empty((batch_size,), dtype=np.uint32)
 
     its = [iterator.LocalViewIterator(mesh, n_points, order=order,
+                                      batch_size=batch_size,
                                       pc_align=pc_align, method=method,
-                                      verbose=False, pc_norm=pc_norm) 
+                                      verbose=False, pc_norm=pc_norm)
            for mesh in meshes]
     multi_it = collections.deque(list(enumerate(its)))
 

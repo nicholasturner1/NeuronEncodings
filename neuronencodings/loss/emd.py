@@ -22,11 +22,11 @@ from torch.nn.modules import distance
 
 from torch.autograd import Function
 
+
 class EMDFunction(Function):
 
     @staticmethod
     def forward(ctx, preds, targets):
-
         pwdist = self.pairwise_dist(preds, targets)
         match = self.optimal_match(pwdist)
         ctx.save_for_backward(match, pwdist)
@@ -71,9 +71,6 @@ class EMDFunction(Function):
     @staticmethod
     def backward(ctx, grad_output):
         match, pwdist = ctx.saved_tensors
-
-
-
 
 
 class ApproxEMD(EMD):

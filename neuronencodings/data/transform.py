@@ -20,8 +20,13 @@ def random_sample(vertices, n_points, seed=None):
 
 def norm_to_unit_sphere(vertices):
     """ Normalizes a point cloud to the unit sphere with 0 mean in-place """
-    vertices -= np.min(vertices, axis=0)[None]
-    vertices /= np.max(np.linalg.norm(vertices, axis=1))
+    return norm_to_unit_sphere_many(np.array([vertices]))[0]
+
+
+def norm_to_unit_sphere_many(vertices):
+    """ Normalizes a point cloud to the unit sphere with 0 mean in-place """
+    vertices -= np.mean(vertices, axis=1)[:, None]
+    vertices /= np.max(np.linalg.norm(vertices, axis=2), axis=1)[:, None, None]
 
     return vertices
 

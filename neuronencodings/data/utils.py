@@ -5,7 +5,7 @@ import glob
 import os
 import random
 
-from meshparty import mesh_io
+from meshparty import trimesh_io
 
 
 # Datasets -----------------------
@@ -25,12 +25,23 @@ DATASET_DIRS = {
 
     "orphan_axons": [f"{SVEN_BASE}/pointnet_orphan_axons_gt_180308/"],
 
+    "chandelier_axons": [f"{SVEN_BASE}/InhAnalysis/meshes_Chandelier/"],
+
     "orphan_axons_refined": [(f"{SVEN_BASE}"
                               "/pointnet_orphan_axons_gt_180308_refined/")],
 
     "pinky100_orphan_dends": [(f"{BOTH_BASE}/data/180920_orphan_dends/")],
 
-    "orphan_axons_pinky100": [(f"{SVEN_BASE}/InhAnalysis/meshes_put_axon/")],
+    "pinky100_v50": [(f"{SVEN_BASE}/MeshData/pinky100_meshes/")],
+
+    "fish_axons": [(f"{SVEN_BASE}/1902_axon_mesh_gt_fish/")],
+    "pinky100_orphan_axons": [(f"{SVEN_BASE}/1902_axon_mesh_gt/")],
+    "pinky100_baskets": [(f"{SVEN_BASE}/190426_basket_axons/")],
+    "pinky100_baskets_small": [(f"{SVEN_BASE}/1902_axon_mesh_gt_baskets_small/")],
+    "pinky100_pycs": [(f"{SVEN_BASE}/1902_mesh_gt_pycs/")],
+    "pinky100_pycs_small": [(f"{SVEN_BASE}/1902_mesh_gt_pycs_small/")],
+    "pinky40_orphan_axons": [(f"{SVEN_BASE}/InhAnalysis/meshes/pinky40/put_axon/")],
+    # "pinky100_orphan_axons": [(f"meshes_put_axon/")],
 
     "fish_refined": [f"{SVEN_BASE}/180831_meshes_ashwin_refined/"],
 
@@ -41,6 +52,8 @@ DATASET_DIRS = {
     "full_cells_refined": [(f"{SVEN_BASE}"
                             "/pointnet_full_semantic_labels"
                             "_masked_180401_refined/")],
+
+    "full_cells_pinky40_clean": [(f"{SVEN_BASE}/InhAnalysis/meshes/pinky40/full_cells/")],
 
     "pinky100_orphan_dend_features": [(f"{BOTH_BASE}"
                                        "/nick_archive/p100_dend_outer"
@@ -122,4 +135,4 @@ def save_samples(samples, output_prefix="sample"):
         vertex_fname = "{pref}{i}_vertices.ply".format(pref=output_prefix, i=i)
         if os.path.dirname(vertex_fname) == "":
             vertex_fname = "./" + vertex_fname
-        mesh_io.Mesh.write_vertices_ply(None, vertex_fname, coords=vertices)
+        trimesh_io.Mesh.write_vertices_ply(None, vertex_fname, coords=vertices)
