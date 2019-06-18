@@ -67,22 +67,8 @@ parser.add_argument('--lr', type=float, default=0.001,
                     help='learning rate')
 parser.add_argument('--lr_decay', type=float, default=0.95,
                     help='learning rate decay every 10 epochs')
-parser.add_argument('--nonorm', action="store_true",
-                    help='do not normalize points to unit sphere')
-parser.add_argument('--adaptnorm', action="store_true",
-                    help='centers unit sphere on sample coord')
-parser.add_argument('--fisheye', action="store_true",
-                    help='downsamples to fisheye effect')
-parser.add_argument('--rotation', action="store_true",
-                    help='augment with rotation')
-parser.add_argument('--jitter', action="store_true",
-                    help='augment with jitter')
-parser.add_argument('--scaling', action="store_true",
-                    help='augment with scaling')
-parser.add_argument('--movement', action="store_true",
-                    help='augment with movement')
-parser.add_argument('--chopping', action="store_true",
-                    help='augment with chopping')
+parser.add_argument('--n_views_per_batch', type=int, default=5,
+                    help="number of views from the same cell per batch")
 parser.add_argument('--dataset_name', type=str, default="full_cells",
                     choices=list(data.DATASET_DIRS.keys()),
                     help='ground truth dataset')
@@ -132,20 +118,12 @@ phase = data.Phase.FULL if opt.use_full_data else data.Phase.TRAIN
 train_dset = CellDataset(gt_dirs=gt_dirs,
                          phase=phase,
                          n_points=opt.n_points,
+                         n_views_per_batch=opt.n_views_per_batch,
                          sample_n_points=opt.sample_n_points,
                          random_seed=opt.manualSeed,
-                         apply_rotation=opt.rotation,
-                         apply_jitter=opt.jitter,
-                         apply_scaling=opt.scaling,
-                         apply_chopping=opt.chopping,
-                         apply_movement=opt.movement,
-                         apply_norm=not(opt.nonorm),
-                         adaptnorm=opt.adaptnorm,
-                         fisheye=opt.fisheye,
                          train_split=opt.train_split,
                          val_split=opt.val_split,
-                         test_split=opt.test_split,
-                         local_env=opt.local_env)
+                         test_split=opt.test_split)
 
 train_loader = torch.utils.data.DataLoader(train_dset,
                                            batch_size=opt.batch_size,
@@ -159,20 +137,12 @@ if not(opt.noval):
     val_dset = CellDataset(gt_dirs=gt_dirs,
                            phase=data.Phase.VAL,
                            n_points=opt.n_points,
+                           n_views_per_batch=opt.n_views_per_batch,
                            sample_n_points=opt.sample_n_points,
                            random_seed=opt.manualSeed,
-                           apply_rotation=False,
-                           apply_jitter=False,
-                           apply_scaling=False,
-                           apply_chopping=False,
-                           apply_movement=False,
-                           apply_norm=not(opt.nonorm),
-                           adaptnorm=opt.adaptnorm,
-                           fisheye=opt.fisheye,
                            train_split=opt.train_split,
                            val_split=opt.val_split,
-                           test_split=opt.test_split,
-                           local_env=opt.local_env)
+                           test_split=opt.test_split)
 
     val_loader = torch.utils.data.DataLoader(val_dset,
                                              batch_size=opt.batch_size,
@@ -230,7 +200,7 @@ for i_epoch in range(opt.nepoch):
         val_data_iter = iter(val_loader)
 
     for i_batch, points in enumerate(train_loader, 0):
-
+        points = points.reshape(-1, opt.n_points, opt.point_dim)
         points = points.cuda()
 
         optimizer.zero_grad()

@@ -27,11 +27,9 @@ class Phase(enum.Enum):
 
 
 class CellDataset(data.Dataset):
-    def __init__(self, gt_dirs, n_points=2500, sample_n_points=2500, phase=Phase.TRAIN,
-                 random_seed=0, train_split=0.8, val_split=0.1, test_split=0.1,
-                 local_env=True, apply_jitter=False, apply_rotation=False,
-                 apply_scaling=False, apply_movement=False, apply_norm=True,
-                 adaptnorm=False, fisheye=False, apply_chopping=False,
+    def __init__(self, gt_dirs, n_points=2500, sample_n_points=2500,
+                 phase=Phase.TRAIN, random_seed=0, train_split=0.8,
+                 val_split=0.1, test_split=0.1, n_views_per_batch=5,
                  n_max_meshes_per_dataset=None):
         self._gt_dirs = gt_dirs
         self._n_max_meshes_per_dataset = n_max_meshes_per_dataset
@@ -40,18 +38,7 @@ class CellDataset(data.Dataset):
         self._n_points = n_points
         self._sample_n_points = sample_n_points
 
-        self._local_env = local_env
-        self._adaptnorm = adaptnorm
-        if adaptnorm:
-            self._apply_norm = False
-        else:
-            self._apply_norm = apply_norm
-        self._fisheye = fisheye
-        self._apply_jitter = apply_jitter
-        self._apply_rotation = apply_rotation
-        self._apply_scaling = apply_scaling
-        self._apply_movement = apply_movement
-        self._apply_chopping = apply_chopping
+        self._n_views_per_batch = n_views_per_batch
 
         self._phase = Phase(phase)
         self._train_split = train_split
@@ -86,40 +73,8 @@ class CellDataset(data.Dataset):
         return self._sample_n_points
 
     @property
-    def local_env(self):
-        return self._local_env
-
-    @property
-    def apply_norm(self):
-        return self._apply_norm
-
-    @property
-    def adaptnorm(self):
-        return self._adaptnorm
-
-    @property
-    def fisheye(self):
-        return self._fisheye
-
-    @property
-    def apply_jitter(self):
-        return self._apply_jitter
-
-    @property
-    def apply_rotation(self):
-        return self._apply_rotation
-
-    @property
-    def apply_scaling(self):
-        return self._apply_scaling
-
-    @property
-    def apply_movement(self):
-        return self._apply_movement
-
-    @property
-    def apply_chopping(self):
-        return self._apply_chopping
+    def n_views_per_batch(self):
+        return self._n_views_per_batch
 
     @property
     def random_seed(self):
@@ -174,8 +129,6 @@ class CellDataset(data.Dataset):
             return len(self._valid_files)
 
     def __getitem__(self, index):
-        time_start = time.time()
-
         if self._phase == Phase.TRAIN:
             mesh_fname = self._train_files[index]
         elif self._phase == Phase.VAL:
@@ -185,45 +138,29 @@ class CellDataset(data.Dataset):
         else:   # default phase == Phase.FULL
             mesh_fname = self._valid_files[index]
 
-        # print(f"loading {mesh_fname}")
         mesh = self.meshmeta.mesh(mesh_fname, merge_large_components=False)
-        # print(f"loaded {mesh_fname}")
 
         if mesh is None:
             print(f"WARNING: {mesh_fname} has no vertices")
 
-        if self.local_env:
-            vertices, _ = mesh.get_local_view(self.n_points, pc_align=True,
-                                              pc_norm=False, method="kdtree",
-                                              adapt_unit_sphere_norm=self.adaptnorm,
-                                              fisheye=self.fisheye,
-                                              sample_n_points=self.sample_n_points)
+        vertex_list = []
+        for i_view in range(self.n_views_per_batch):
+            vertices, v_id = mesh.get_local_view(self.n_points, pc_align=True,
+                                                 pc_norm=False,
+                                                 sample_n_points=self.sample_n_points)
             vertices = vertices.squeeze()
-        else:
-            vertices = transform.random_sample(mesh.vertices, self.n_points)
 
-        if len(vertices) < self.n_points:
-            # can get here if the whole mesh is too small and we take a
-            # local env (?) --> yes
-            vertices = transform.random_sample(vertices, self.n_points)
+            if len(vertices) < self.n_points:
+                # can get here if the whole mesh is too small
+                vertices = transform.random_sample(vertices, self.n_points)
+            vertex_list.append(vertices)
+
+        vertex_list = np.array(vertex_list)
 
         # Normalize to unit sphere and mean zero
-        if self.apply_norm:
-            vertices = transform.norm_to_unit_sphere(vertices)
+        vertex_list = transform.norm_to_unit_sphere_many(vertex_list)
 
-        # Apply augmentations
-        if self.apply_rotation:
-            vertices = transform.rotate(vertices)
-        if self.apply_jitter:
-            vertices = transform.jitter(vertices)
-        if self.apply_scaling:
-            vertices = transform.scale(vertices)
-        if self.apply_movement:
-            vertices = transform.translate(vertices)
-
-        vertices = torch.from_numpy(vertices.astype(np.float32))
-        # print(f"extracted points {mesh_fname} in %.3fs" % (time.time() - time_start))
-        return vertices
+        return vertex_list.astype(np.float32)
 
     def _pick_files(self):
         """
